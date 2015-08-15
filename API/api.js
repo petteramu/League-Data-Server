@@ -28,23 +28,68 @@ var RiotAPI = function(settings) {
     //Whether or not the queue is being executed
     this.executing = false;
     
-    //Create timestampHandler and use default settings
-    var tsh = new timestampHandler();
-    
     //Holds the static data that are downloaded for future re-use
     this.staticData = {};
     
+    //The time that is forced between two calls
+    this.forcedTimeBetweenCalls = settings.forcedTimeBetweenCalls || 250;
+    
+    
+    //Rate limit functions
+    //Array holding the timestamps of recently made requests
+    this.timestamps = [];
+    
+    //Different rate limits
+    this.limits = [{
+        maxCalls: 10,
+        maxTime: 10
+    }, {
+        maxCalls: 500,
+        maxTime: 600
+    }];
+    
+    //Find the largest maxCalls and set it to limit the amount of timestamps
+    this.timestampLimit = 0;
+    for(var i = 0; i < this.limits.length; i++) {
+        if(this.limits[i].maxCalls > this.timestampLimit)
+            this.timestampLimit = this.limits[i].maxCalls;
+    };
+    
+    //Finds the time remaining for either the limit per 10min or 10s, dependent on which is longer
+    this.getTimeRemaining = function() {
+        debugger;
+        var remaining = []; //Array holding the different values for the time remaining
+        
+        //Iterate each limit and find the time remaining for each
+        for(var i = 0; i < this.limits.length; i++) {
+            var limitObj = this.limits[i];
+            
+            if(this.timestamps.length >= limitObj.maxCalls) {
+                remaining.push((limitObj.maxTime * 1000) - (new Date() - this.timestamps[limitObj.maxCalls-1])); //In milliseconds
+
+            } else {
+                remaining.push(0);
+            }
+        };
+        
+        return Math.max.apply(Math, remaining);
+    }
+    
+    //Adds a timestamp
+    this.addStamp = function(timestamp) {
+        //Remove if at max calls
+        if(this.timestamps.length == this.timestampLimit) this.timestamps.pop();
+        
+        //Increase the delay a little
+        var newDate = new Date(timestamp);
+        
+        //Insert at the start
+        this.timestamps.unshift(newDate);
+    }
+    
+            
     //Adds a url to the request queue and start executing the queue if its not already executing
     this.addToQueue = function(url, cb) {
-        //Local variable to determine whether or not to execute later even though the real one says we are executing the queue
-        var execute = false;
-        
-        //Already here we say that the queue is executing as it will eventually
-        if(this.executing === false) {
-            this.executing = true;
-            execute = true;
-        }
-
         //Create queueitem
         var item = {
             url: url,
@@ -55,7 +100,7 @@ var RiotAPI = function(settings) {
         this.queue.push(item);
         
         //Execute queue if the new promise is the only one in it
-        if(execute) this.executeNext();
+        if(!this.executing) this.executeNext();
     };
     
     //Gets the next item in the queue of null
@@ -67,7 +112,14 @@ var RiotAPI = function(settings) {
     }
 
     //Execute the next item in the queue
-    this.executeNext = function() {
+    this.executeNext = function(frommr) {
+        //Do not execute another if there is a request in the waiting
+        //This forces the queue to only execute one reques at a time
+        if(this.waiting) return;
+        
+        //Set that the API is executing a request
+        this.executing = true;
+        
         //Get next item
         var item = this.getNextItem();
         
@@ -79,20 +131,20 @@ var RiotAPI = function(settings) {
         }
         
         //Check if the rate limit is reached
-        var timeRemaining = tsh.getTimeRemaining();
+        var timeRemaining = this.getTimeRemaining();
+        
+        //Display debug info
         if(timeRemaining > 0) {
-            //Display debug info
-            if(this.debug) console.log("Waiting: %s", timeRemaining);
-            
-            //Run after a delay
-            var _this = this;
-            setTimeout(function() { _this.makeRequest(item.url, item.callback   ); }, timeRemaining);
+            console.log("Waiting: %s", timeRemaining);
+            this.waiting = true;
         }
-        //No rate limit at the moment, proceed
-        else {
-            //Execute request
-            this.makeRequest(item.url, item.callback);
-        }
+        
+        //Run again after a delay
+        var _this = this;
+        setTimeout(function() {
+            _this.waiting = false;
+            _this.makeRequest(item.url, item.callback);
+        }, timeRemaining);
     }
     
     //Makes an actual request
@@ -112,10 +164,8 @@ var RiotAPI = function(settings) {
             method: 'GET'
         };
         
-        //Add stamp
-        tsh.addStamp(new Date());
-        
         req.get(options).then(function(data) {
+            _this.addStamp(new Date());
             
             //Return as JSON if it is in json format
             try {
@@ -127,15 +177,25 @@ var RiotAPI = function(settings) {
             catch(e) {
                 cb(null, data);
             }
+            finally {
+                //Proceed in the queue
+                _this.executeNext("y");
+            }
             
-            //Proceed in the queue
-            _this.executeNext();
         }).catch(errors.StatusCodeError, function(error) {
             //Reject
             cb(error);
+            
+            //Proceed in the queue
+            _this.executeNext("e1");
+            
         }).catch(errors.RequestError, function(error) {
             //Reject
             cb(error);
+            
+            //Proceed in the queue
+            _this.executeNext("e2");
+            
         });
     }
     
@@ -200,13 +260,12 @@ var RiotAPI = function(settings) {
                 }
             });
         });
-        
     }
     
     ////////////
     //From here down the api's endpoints are listed
     ////////////
-
+    
     //Gets the current version of lol. Notice: not the version of the API
     this.getCurrentVersion = function (region) {
         //Helper
@@ -685,36 +744,6 @@ var RiotAPI = function(settings) {
     
     //Return this object
     return this;
-}
-
-//This class holds information on when calls were made to the API endpoint
-//It holds a maximum of 10 timestamps
-//maxTime is in seconds
-var timestampHandler = function(settings) {
-    this.timestamps = [];
-    this.maxCalls = (settings) ? settings.maxCalls : 10;
-    this.maxTime  = (settings) ? settings.maxTime  : 10;
-    
-    //Returns the time remaining before a new call can be made in milliseconds
-    this.getTimeRemaining = function() {
-        if(this.timestamps.length == this.maxCalls) {
-            //Return the time in milliseconds, therefore transform maxTune to ms
-            return (this.maxTime * 1000) - (new Date() - this.timestamps[0]);
-        }
-        else {
-            //If there are less than the set amount og max calls made, the time until the next can be made is always 0
-            return 0;
-        }
-    }
-    
-    //Adds a timestamp
-    this.addStamp = function(timestamp) {
-        //Remove if at max calls
-        if(this.timestamps.length == this.maxCalls) this.timestamps.shift();
-        
-        //Insert
-        this.timestamps.push(timestamp);
-    }
 }
 
 module.exports = RiotAPI;

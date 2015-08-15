@@ -116,9 +116,9 @@ var serverController = function(server, socket, api) {
                                 }
                             //Catch errors from the API
                             }).catch(function(error) {
-                                console.log(error.stack);
-                                console.log(error);
-                                reject("Error while getting the data from the API");
+//                                console.log(error.stack);
+//                                console.log(error);
+                                reject(error);
                             });
                         })
                     );
@@ -136,6 +136,7 @@ var serverController = function(server, socket, api) {
 
                 }, function(error) {
                     console.log("error in match history");
+                    console.log(error.stack);
                     reject(error);
                 });
                 
@@ -315,14 +316,10 @@ var serverController = function(server, socket, api) {
                 return Promise.resolve();
                 
             }).catch(function(error) {
-                //Problem with the datqabase
                 if(typeof error === 'undefined') console.log("Updating 0 champion statistics");
-                return Promise.resolve(error);
+                return Promise.resolve();
             
             }).then(function() {
-                //Dont send an empty result set
-                if(dbData.length == 0) return Promise.reject();
-                
                 response = JSON.parse(JSON.stringify(gameData)); //Clone gameData object
 
                 //Noone needs updating
@@ -335,26 +332,10 @@ var serverController = function(server, socket, api) {
                     });
                 });
                 
-                //Fetch champion averages
-                return db.getChampionAverages(gameData);
-            
-            }).then(function(avgData) {
-                //Now include the averages in the response
-                avgData.forEach(function(avgElement, index) {
-                    var found = false;
-                    response.pairs.forEach(function(responseElement) {
-                        if(avgElement.championId == responseElement.championId) {
-                            responseElement.average = avgElement;
-                            found = true;
-                        }
-                    });
-                });
-
-                //Resolve the promise
                 resolve(response);
                     
             }).catch(function(error) {
-                console.log(error);
+                console.log("error: %s", error);
                 reject(err);
             });
         });
@@ -527,7 +508,7 @@ var serverController = function(server, socket, api) {
                 return fetchMatchHistory(gameObject);
                 
             }).catch(function(error) {
-                console.log(error.stack);
+//                console.log(error.stack);
                 errorMessage = (typeof errorMessage === 'undefined') ? "Error while getting match history" : errorMessage;
                 return Promise.Reject(errorMessage);
                 
@@ -541,8 +522,8 @@ var serverController = function(server, socket, api) {
                 server.emitData(null, socket, "mostplayed", data);
             
             }).catch(function(error) {
-                console.log(error.stack);
-                console.log(errorMessage);
+//                console.log(error.stack);
+//                console.log(errorMessage);
             });
         }
     }
