@@ -116,9 +116,9 @@ var serverController = function(server, socket, api) {
                                 }
                             //Catch errors from the API
                             }).catch(function(error) {
-//                                console.log(error.stack);
-//                                console.log(error);
-                                reject(error);
+                                console.log(error.stack);
+                                //We resolve anyway since we dont want to throw away the rest of the data
+                                resolve();
                             });
                         })
                     );
@@ -134,10 +134,6 @@ var serverController = function(server, socket, api) {
 
                     resolve(response);
 
-                }, function(error) {
-                    console.log("error in match history");
-                    console.log(error.stack);
-                    reject(error);
                 });
                 
             }).catch(function(error) {

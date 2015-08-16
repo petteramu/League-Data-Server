@@ -32,7 +32,7 @@ var RiotAPI = function(settings) {
     this.staticData = {};
     
     //The time that is forced between two calls
-    this.forcedTimeBetweenCalls = settings.forcedTimeBetweenCalls || 250;
+    this.forcedTimeBetweenCalls = settings.forcedTimeBetweenCalls || 0;
     
     
     //Rate limit functions
@@ -65,7 +65,7 @@ var RiotAPI = function(settings) {
             var limitObj = this.limits[i];
             
             if(this.timestamps.length >= limitObj.maxCalls) {
-                remaining.push((limitObj.maxTime * 1000) - (new Date() - this.timestamps[limitObj.maxCalls-1])); //In milliseconds
+                remaining.push((limitObj.maxTime * 1000) - (new Date() - this.timestamps[limitObj.maxCalls-1]) + this.forcedTimeBetweenCalls); //In milliseconds
 
             } else {
                 remaining.push(0);
@@ -164,8 +164,8 @@ var RiotAPI = function(settings) {
             method: 'GET'
         };
         
+        _this.addStamp(new Date());
         req.get(options).then(function(data) {
-            _this.addStamp(new Date());
             
             //Return as JSON if it is in json format
             try {
@@ -185,7 +185,7 @@ var RiotAPI = function(settings) {
         }).catch(errors.StatusCodeError, function(error) {
             //Reject
             cb(error);
-            
+            console.log(error.statusCode);
             //Proceed in the queue
             _this.executeNext("e1");
             
