@@ -3,6 +3,7 @@
 var req = require("request-promise");
 var errors = require('request-promise/errors');
 var url = require('url');
+var Promise = require('bluebird');
 
 var RiotAPI = function(settings) {
     this.debug  = settings.debug  || false;
@@ -32,7 +33,8 @@ var RiotAPI = function(settings) {
     this.staticData = {};
     
     //The time that is forced between two calls
-    this.forcedTimeBetweenCalls = settings.forcedTimeBetweenCalls || 0;
+    //Mainly used to account for the time taken between adding a stamp and the actual call being made in the riot db
+    this.forcedTimeBetweenCalls = settings.forcedTimeBetweenCalls || 50;
     
     
     //Rate limit functions
@@ -112,7 +114,7 @@ var RiotAPI = function(settings) {
     }
 
     //Execute the next item in the queue
-    this.executeNext = function(frommr) {
+    this.executeNext = function() {
         //Do not execute another if there is a request in the waiting
         //This forces the queue to only execute one reques at a time
         if(this.waiting) return;
@@ -179,7 +181,7 @@ var RiotAPI = function(settings) {
             }
             finally {
                 //Proceed in the queue
-                _this.executeNext("y");
+                _this.executeNext();
             }
             
         }).catch(errors.StatusCodeError, function(error) {
@@ -187,14 +189,14 @@ var RiotAPI = function(settings) {
             cb(error);
             console.log(error.statusCode);
             //Proceed in the queue
-            _this.executeNext("e1");
+            _this.executeNext();
             
         }).catch(errors.RequestError, function(error) {
             //Reject
             cb(error);
             
             //Proceed in the queue
-            _this.executeNext("e2");
+            _this.executeNext();
             
         });
     }
@@ -717,6 +719,13 @@ var RiotAPI = function(settings) {
         'ODIN': 'Dominion/Crystal Scar game',
         'ARAM':	'ARAM/Howling Abyss game',
         'TUTORIAL':	'Tutorial game'
+    };
+    
+    this.readableMaps = {
+        '1':  'Original Summoner&#39;s Rift',
+        '10': 'Current Twisted Treeline',
+        '11': 'Current Summoner&#39;s Rift',
+        '12': 'Howling Abyss'
     };
 
     this.platforms = {

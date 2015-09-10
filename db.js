@@ -1,5 +1,6 @@
 "use strict";
 var mysql  = require('promise-mysql');
+var Promise = require('bluebird');
 
 //TODO: fix database to contain only averages, as the total amount of deaths is not provided from the Riot API, and therefore the total amount derived will be wrong as the numbers might be rounded
 //TODO: handle the league request to handle a 404 return(of none of the playes are ranked)
@@ -20,6 +21,8 @@ var Database = (function()
             debug: false
         }).then(function(conn) {
             connection = conn;
+        }).catch(function(error) {
+            console.log(error);
         });
         
         //Everything inside is public

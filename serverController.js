@@ -1,4 +1,5 @@
 var Database = require('./db.js');
+var Promise = require('bluebird');
 
 var serverController = function(server, socket, api) {
     var server = server;
@@ -23,8 +24,15 @@ var serverController = function(server, socket, api) {
                         }
                     }
                 });
-
+                
+                //Add version
                 apiData.version = api.staticData.version;
+                
+                
+                //Add readable data
+                apiData.readableQueue = api.readableQueues[apiData.gameQueueConfigId];
+                apiData.readableMap   = api.readableMaps[apiData.mapId];
+                
 
                 //Include the participant number in the response
                 apiData['participants'].forEach(function(pElement, index) {
@@ -440,7 +448,7 @@ var serverController = function(server, socket, api) {
                 //Handle the error
                 console.log(error.stack);
                 errorMessage = "No summoner by that name";
-                return Promise.Reject(errorMessage);
+                return Promise.reject(errorMessage);
                 
             }).then(function(data) {
                 //Continue with getting the actual game data
@@ -451,7 +459,7 @@ var serverController = function(server, socket, api) {
                 console.log(error.stack);
                 errorMessage = (typeof errorMessage === 'undefined') ? "Summoner currently not in a game" : errorMessage; 
             
-                return Promise.Reject(errorMessage);
+                return Promise.reject(errorMessage);
                 
             //Handle data and proceed
             }).then(function(data) {
@@ -467,7 +475,7 @@ var serverController = function(server, socket, api) {
                 //Handle error
                 console.log(error.stack);
                 errorMessage = (typeof errorMessage === 'undefined') ? "Could not fetch core data" : errorMessage; 
-                return Promise.Reject(errorMessage);
+                return Promise.reject(errorMessage);
             
             //Send core data and proceed
             }).then(function(data) {
@@ -481,7 +489,7 @@ var serverController = function(server, socket, api) {
                 errorMessage = (typeof errorMessage === 'undefined') ? "Could net fetch league data" : errorMessage; 
                 
                 //Continue sending other data
-                return Promise.Reject(errorMessage);
+                return Promise.reject(errorMessage);
                 
             //Send league data and proceed
             }).then(function(data) {
@@ -495,7 +503,7 @@ var serverController = function(server, socket, api) {
                 errorMessage = (typeof errorMessage === 'undefined') ? "Could not fetch champ data" : errorMessage; 
                 
                 //Continue sending other data
-                return Promise.Reject(errorMessage);
+                return Promise.reject(errorMessage);
                 
             //Send champ data and proceed
             }).then(function(data) {
@@ -506,7 +514,7 @@ var serverController = function(server, socket, api) {
             }).catch(function(error) {
 //                console.log(error.stack);
                 errorMessage = (typeof errorMessage === 'undefined') ? "Error while getting match history" : errorMessage;
-                return Promise.Reject(errorMessage);
+                return Promise.reject(errorMessage);
                 
             //Send match history data
             }).then(function(data) {

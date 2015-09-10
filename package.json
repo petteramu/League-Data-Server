@@ -1,9 +1,10 @@
 {
-  "name": "LeagueSiteServer",
+  "name": "League-Data-Server",
   "version": "1.0.0",
   "description": "The server for the leaguesite project",
   "main": "server.js",
   "dependencies": {
+    "bluebird": "^2.9.34",
     "express": "^4.13.0",
     "irelia": "^0.2.5",
     "jasmine-node": "^1.14.5",

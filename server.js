@@ -9,6 +9,8 @@ var serverController = require('./serverController.js');
 
 var server = function() {
     
+    var server_port = process.env.OPENSHIFT_NODEJS_PORT || 8080;
+    var server_ip   = process.env.OPENSHIFT_NODEJS_IP   || '127.0.0.1';
     io.set('origins', '*:*');
     
     var connections = [];
@@ -19,12 +21,11 @@ var server = function() {
         debug: false
     });
 
-    httpserver.listen(1337);
+    httpserver.listen(server_port, server_ip, function() {
+        console.log("Server online at: " + server_ip + ":" + server_port);
+    });
 
     var instance = this;
-    var host = httpserver.address().address;
-    var port = httpserver.address().port;
-    console.log("Server online at: "+host+":"+port);
     
     io.sockets.on('connection', function (socket) {
         console.log( "- Connection established: " + socket.request );
