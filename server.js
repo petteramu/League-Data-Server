@@ -39,15 +39,18 @@ var server = function() {
             var controller = new serverController(instance, socket, api);
             controller.createCurrentGameData(data);
         });
+        
+        socket.on('get:randomgame', function(data) {
+            console.log( "- Request received for random game data: " + socket.request );
+            var controller = new serverController(instance, socket, api);
+            controller.getRandomFeaturedGame(data);
+        });
     }
     
     //Public functions
-    this.emitData = function(err, socket, type, data) {
+    this.emitData = function(socket, type, data) {
         console.log("sending data: " + type);
-        if(err) {
-            socket.emit('message', err);
-            return;
-        }
+
         var result = {};
         result[type] = data;
         socket.emit('message', result);

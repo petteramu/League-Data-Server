@@ -44,4 +44,4 @@ Temporary Items
 /test
 
 run.bat
-nodemodules/
+node_modules/

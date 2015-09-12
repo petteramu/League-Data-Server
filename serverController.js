@@ -340,7 +340,7 @@ var serverController = function(server, socket, api) {
                     
             }).catch(function(error) {
                 console.log("error: %s", error);
-                reject(err);
+                reject(error);
             });
         });
     }
@@ -428,6 +428,7 @@ var serverController = function(server, socket, api) {
         }
     }
     
+    //Public
     return {
         //Starts the process of creating data on the curret game of a summoner
         //Handles the errors from the API, but does not handle the data itself
@@ -448,6 +449,8 @@ var serverController = function(server, socket, api) {
                 //Handle the error
                 console.log(error.stack);
                 errorMessage = "No summoner by that name";
+                
+                //Reject the promise so we do not continue attempting to get data
                 return Promise.reject(errorMessage);
                 
             }).then(function(data) {
@@ -457,8 +460,10 @@ var serverController = function(server, socket, api) {
             }).catch(function(error) {
                 //Handle the error
                 console.log(error.stack);
+                
+                //If an error message is already defined, it means it is passed from a previous promise.
                 errorMessage = (typeof errorMessage === 'undefined') ? "Summoner currently not in a game" : errorMessage; 
-            
+                
                 return Promise.reject(errorMessage);
                 
             //Handle data and proceed
@@ -479,55 +484,146 @@ var serverController = function(server, socket, api) {
             
             //Send core data and proceed
             }).then(function(data) {
-                server.emitData(null, socket, "core", data);
+                server.emitData(socket, "core", data);
                 //Get statistics on the leagues of each player
                 return fetchLeagueData(gameObject);
                 
             }).catch(function(error) {
                 //Handle error
                 console.log(error.stack);
-                errorMessage = (typeof errorMessage === 'undefined') ? "Could net fetch league data" : errorMessage; 
                 
-                //Continue sending other data
-                return Promise.reject(errorMessage);
+                if(typeof errorMessage === 'undefined') {
+                    //An error message was not defined earlier, therefore we attempt to fetch the rest of the data as this data is not crucial
+                    
+                    //Continue sending other data
+                    server.emitData(socket, "error", {
+                        type: "league",
+                        error: "Could not fetch league data"
+                    });
+                    
+                    //Resolve with false to not send data
+                    return Promise.resolve(false);
+                }
+                else {
+                    //Reject if some error was defined earlier, as that means crucial data is missing
+                    return Promise.reject(errorMessage);
+                }
                 
             //Send league data and proceed
             }).then(function(data) {
-                server.emitData(null, socket, "leaguedata", data);
+                //If "data" is "false", do not send data, as there was an error
+                if(data !== false) server.emitData(socket, "leaguedata", data);
+                
                 //Get statistics on the champions each play plays
                 return fetchChampData(gameObject);
             
             }).catch(function(error) {
                 //Handle error
                 console.log(error.stack);
-                errorMessage = (typeof errorMessage === 'undefined') ? "Could not fetch champ data" : errorMessage; 
                 
-                //Continue sending other data
-                return Promise.reject(errorMessage);
+                if(typeof errorMessage === 'undefined') {
+                    //An error message was not defined earlier, therefore we attempt to fetch the rest of the data as this data is not crucial
+                    
+                    //Continue sending other data
+                    server.emitData(socket, "error", {
+                        type: "champion",
+                        error: "Could not fetch champion data"
+                    });
+                    
+                    //Resolve with false to not send data
+                    return Promise.resolve(false);
+                }
+                else {
+                    //Reject if some error was defined earlier, as that means crucial data is missing
+                    return Promise.reject(errorMessage);
+                }
                 
             //Send champ data and proceed
             }).then(function(data) {
-                server.emitData(null, socket, "champdata", data);
+                //If "data" is "false", do not send data, as there was an error
+                if(data !== false) server.emitData(socket, "champdata", data);
+                
                 //Send the match history of each player
                 return fetchMatchHistory(gameObject);
                 
             }).catch(function(error) {
-//                console.log(error.stack);
-                errorMessage = (typeof errorMessage === 'undefined') ? "Error while getting match history" : errorMessage;
-                return Promise.reject(errorMessage);
+                //Handle error
+                console.log(error.stack);
+                
+                if(typeof errorMessage === 'undefined') {
+                    //An error message was not defined earlier, therefore we attempt to fetch the rest of the data as this data is not crucial
+                    errorMessage = "Could not fetch match history data";
+                    
+                    //Continue sending other data
+                    server.emitData(socket, "error", {
+                        type: "matchhistory",
+                        error: error
+                    });
+                    
+                    //Resolve with false to not send data
+                    return Promise.resolve(false);
+                }
+                else {
+                    //Reject if some error was defined earlier, as that means crucial data is missing
+                    return Promise.reject(errorMessage);
+                }
                 
             //Send match history data
             }).then(function(data) {
-                server.emitData(null, socket, "matchhistory", data);
+                //If "data" is "false", do not send data, as there was an error
+                if(data !== false) server.emitData(socket, "matchhistory", data);
                 
-                return fetchMostPlayedChampions(gameObject, 5);
+                //Fetch the most played champions of each player
+                var numberOfTopChamps = 5; //TODO: Create config file
+                return fetchMostPlayedChampions(gameObject, numberOfTopChamps);
                 
             }).then(function(data) {
-                server.emitData(null, socket, "mostplayed", data);
+                server.emitData(socket, "mostplayed", data);
             
             }).catch(function(error) {
-//                console.log(error.stack);
-//                console.log(errorMessage);
+                //Handle error
+                console.log(error.stack);
+                
+                if(typeof errorMessage === 'undefined') {
+                    //An error message was not defined earlier, therefore we attempt to fetch the rest of the data as this data is not crucial
+                    errorMessage = "Could not fetch most played champions data";
+                    
+                    //Send error message
+                    server.emitData(socket, "error", {
+                        type: "matchhistory",
+                        error: error
+                    });
+                }
+                else {
+                    server.emitData(socket, "error", {
+                        type: "crucial",
+                        error: error
+                    });
+                }
+            });
+        },
+        
+        
+        //This method loads the current featured games from the given region and sends back a random games information
+        getRandomFeaturedGame: function(regionData) {
+            var _this = this;
+            
+            //First get the list of featured games from the API
+            api.getFeaturedGames(regionData.region).then(function(data) {
+                var num = data['gameList'].length;
+                var rand = Math.floor(Math.random() * num);
+                
+                //Create current game request for the random game
+                _this.createCurrentGameData({
+                    name: data['gameList'][rand]['participants'][0]['summonerName'],
+                    region: regionData.region
+                });
+                
+            }).catch(function(error) {
+                server.emitData(socket, "error", {
+                    type: "randomfeatured",
+                    error: "Could not fetch featured games"
+                });
             });
         }
     }

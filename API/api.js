@@ -336,6 +336,19 @@ var RiotAPI = function(settings) {
         return this.createPromise(url);
     };
     
+    //Gets a list of featured games
+    this.getFeaturedGames = function(region) {
+        //Create url
+        var url = this.generateUrl({
+            region: region,
+            //Is from the observer endpoints
+            observer: true,
+            path: '/observer-mode/rest/featured'
+        });
+        
+        return this.createPromise(url);
+    };
+    
     //Gets the recent games by a summoner(any type)
     this.getRecentGamesBySummonerId = function (region, summonerId) {
         //Create url
@@ -722,10 +735,10 @@ var RiotAPI = function(settings) {
     };
     
     this.readableMaps = {
-        '1':  'Original Summoner&#39;s Rift',
-        '10': 'Current Twisted Treeline',
-        '11': 'Current Summoner&#39;s Rift',
-        '12': 'Howling Abyss'
+        '1':  "Original Summoner's Rift",
+        '10': "Current Twisted Treeline",
+        '11': "Summoner's Rift",
+        '12': "Howling Abyss"
     };
 
     this.platforms = {
