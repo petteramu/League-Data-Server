@@ -433,13 +433,17 @@ var serverController = function(server, socket, api) {
         //Starts the process of creating data on the curret game of a summoner
         //Handles the errors from the API, but does not handle the data itself
         //Handling the data is done by the private functions of this class
-        createCurrentGameData: function(data) {
-            if( data.name === '' ) {
+        createCurrentGameData: function(options) {
+            if( options.name === '' ) {
                 server.emitData({"error": "No name provided"}, socket);
                 return;
             }
-            var name = data.name.toLowerCase();
-            var region = data.region || 'euw';
+            
+            //Normalize name
+            var name = options.name.toLowerCase().replace(" ", ""),
+                region = options.region || 'euw',
+                _this = this,
+                cancel = false;
             
             var gameObject, gameData, errorMessage;
             
@@ -455,9 +459,18 @@ var serverController = function(server, socket, api) {
                 
             }).then(function(data) {
                 //Continue with getting the actual game data
+                console.log(data);
                 return api.getCurrentGame(region, data[name]['id']);
                 
             }).catch(function(error) {
+                //If the "randomGame" parameter is set, it means we must now go back to the randomgame function to find a new game that actually is going
+                if(options.randomGame) {
+                    _this.getRandomFeaturedGame(region);
+                    console.log("Rerunning");
+                    cancel = true;
+                    return Promise.reject();
+                }
+                
                 //Handle the error
                 console.log(error.stack);
                 
@@ -595,10 +608,13 @@ var serverController = function(server, socket, api) {
                     });
                 }
                 else {
-                    server.emitData(socket, "error", {
-                        type: "crucial",
-                        error: error
-                    });
+                    //Do not send an error if we just get a new game
+                    if(!cancel) {
+                        server.emitData(socket, "error", {
+                            type: "crucial",
+                            error: error
+                        });
+                    }
                 }
             });
         },
@@ -616,7 +632,8 @@ var serverController = function(server, socket, api) {
                 //Create current game request for the random game
                 _this.createCurrentGameData({
                     name: data['gameList'][rand]['participants'][0]['summonerName'],
-                    region: regionData.region
+                    region: regionData.region,
+                    randomGame: true
                 });
                 
             }).catch(function(error) {

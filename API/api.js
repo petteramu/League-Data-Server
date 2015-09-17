@@ -32,6 +32,9 @@ var RiotAPI = function(settings) {
     //Holds the static data that are downloaded for future re-use
     this.staticData = {};
     
+    //Non-static cache
+    this.cache = {};
+    
     //The time that is forced between two calls
     //Mainly used to account for the time taken between adding a stamp and the actual call being made in the riot db
     this.forcedTimeBetweenCalls = settings.forcedTimeBetweenCalls || 50;
@@ -255,8 +258,10 @@ var RiotAPI = function(settings) {
             _this.addToQueue(url, function(err, data) {
                 
                 //Handle error
-                if(err) reject(err);
-                //Resolve
+                if(err) {
+                    reject(err);
+                }
+                //No error = resolve
                 else {
                     resolve(data);
                 }
@@ -304,20 +309,22 @@ var RiotAPI = function(settings) {
         //Helper
         var _this = this;
         
+        var query = {};
+        if(region) query.region = region;
+        if(summonerId) query.summonerId = summonerId;
+        if(championIds) query.championIds = championIds;
+        if(rankedQueues) query.rankedQueues = rankedQueues;
+        if(seasons) query.seasons = seasons;
+        if(beginTime) query.beginTime = beginTime;
+        if(endTime) query.endTime = endTime;
+        if(beginIndex) query.beginIndex = beginIndex;
+        if(endIndex) query.endIndex = endIndex;
+        
         //Create url
         var url = _this.generateUrl({
             region: region,
-            global: true,
-            path: 'v2.2/matchlist/by-summoner/' + summonerId,
-            query: {
-                championIds: championIds,
-                rankedQueues: rankedQueues,
-                seasons: seasons,
-                beginTime: beginTime,
-                endTime: endTime,
-                beginIndex: beginIndex,
-                endIndex: endIndex
-            }
+            path: '/v2.2/matchlist/by-summoner/' + summonerId,
+            query: query
         });
         
         return this.createPromise(url);
