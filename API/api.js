@@ -4,6 +4,7 @@ var req = require("request-promise");
 var errors = require('request-promise/errors');
 var url = require('url');
 var Promise = require('bluebird');
+var config = require('./config.js');
 
 var RiotAPI = function(settings) {
     this.debug  = settings.debug  || false;
@@ -21,7 +22,7 @@ var RiotAPI = function(settings) {
     this.localPath  = settings.localPath || '/api/lol/';
     
     //API key
-    this.key   = settings.key || '586229bd-69d8-4be3-accf-701a8346822c';
+    this.key   = settings.key || config.apiKey;
     
     //The queue that holds the requests
     this.queue = [];
