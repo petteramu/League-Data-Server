@@ -2,12 +2,13 @@ var Database = require('./db.js');
 var Promise = require('bluebird');
 
 var serverController = function(server, socket, api) {
-    var server = server;
-    var socket = socket;
-    var data = data;
-    var champData;
-    var db = Database.getInstance();
-    var _this = this;
+    var server = server,
+        socket = socket,
+        data = data,
+        champData,
+        errorMessage = undefined,
+        db = Database.getInstance(),
+        _this = this;
     
     //Initialize api connection
     var api = api;
@@ -427,6 +428,29 @@ var serverController = function(server, socket, api) {
             region: region
         }
     }
+        
+    function handleErrorMessage(error, location) {
+        console.log(error.stack);
+
+        //Handle error
+        if(typeof errorMessage === 'undefined') {
+            //An error message was not defined earlier, therefore we attempt to fetch the rest of the data as this data is not crucial
+            errorMessage = "Could not fetch " + location + " data";
+
+            //Continue sending other data
+            server.emitData(socket, "error", {
+                location: location,
+                error: errorMessage
+            });
+
+            //Resolve with false to not send data
+            return Promise.resolve(false);
+        }
+        else {
+            //Reject if some error was defined earlier, as that means crucial data is missing
+            return Promise.reject(errorMessage);
+        }
+    }
     
     //Public
     return {
@@ -445,13 +469,15 @@ var serverController = function(server, socket, api) {
                 _this = this,
                 cancel = false;
             
-            var gameObject, gameData, errorMessage;
+            var gameObject, gameData;
             
             //Get the summonerId of the player
             api.getSummonerByName(region, name)
             .catch(function(error) {
                 //Handle the error
                 console.log(error.stack);
+                
+                //Set the errormessage so no future errors are created
                 errorMessage = "No summoner by that name";
                 
                 //Reject the promise so we do not continue attempting to get data
@@ -492,7 +518,9 @@ var serverController = function(server, socket, api) {
             }).catch(function(error) {
                 //Handle error
                 console.log(error.stack);
-                errorMessage = (typeof errorMessage === 'undefined') ? "Could not fetch core data" : errorMessage; 
+                
+                errorMessage = (typeof errorMessage === 'undefined') ? "Could not fetch core data" : errorMessage;
+                
                 return Promise.reject(errorMessage);
             
             //Send core data and proceed
@@ -502,25 +530,7 @@ var serverController = function(server, socket, api) {
                 return fetchLeagueData(gameObject);
                 
             }).catch(function(error) {
-                //Handle error
-                console.log(error.stack);
-                
-                if(typeof errorMessage === 'undefined') {
-                    //An error message was not defined earlier, therefore we attempt to fetch the rest of the data as this data is not crucial
-                    
-                    //Continue sending other data
-                    server.emitData(socket, "error", {
-                        type: "league",
-                        error: "Could not fetch league data"
-                    });
-                    
-                    //Resolve with false to not send data
-                    return Promise.resolve(false);
-                }
-                else {
-                    //Reject if some error was defined earlier, as that means crucial data is missing
-                    return Promise.reject(errorMessage);
-                }
+                handleErrorMessage(error, "league");
                 
             //Send league data and proceed
             }).then(function(data) {
@@ -531,25 +541,7 @@ var serverController = function(server, socket, api) {
                 return fetchChampData(gameObject);
             
             }).catch(function(error) {
-                //Handle error
-                console.log(error.stack);
-                
-                if(typeof errorMessage === 'undefined') {
-                    //An error message was not defined earlier, therefore we attempt to fetch the rest of the data as this data is not crucial
-                    
-                    //Continue sending other data
-                    server.emitData(socket, "error", {
-                        type: "champion",
-                        error: "Could not fetch champion data"
-                    });
-                    
-                    //Resolve with false to not send data
-                    return Promise.resolve(false);
-                }
-                else {
-                    //Reject if some error was defined earlier, as that means crucial data is missing
-                    return Promise.reject(errorMessage);
-                }
+                handleErrorMessage(error, "champion");
                 
             //Send champ data and proceed
             }).then(function(data) {
@@ -560,26 +552,7 @@ var serverController = function(server, socket, api) {
                 return fetchMatchHistory(gameObject);
                 
             }).catch(function(error) {
-                //Handle error
-                console.log(error.stack);
-                
-                if(typeof errorMessage === 'undefined') {
-                    //An error message was not defined earlier, therefore we attempt to fetch the rest of the data as this data is not crucial
-                    errorMessage = "Could not fetch match history data";
-                    
-                    //Continue sending other data
-                    server.emitData(socket, "error", {
-                        type: "matchhistory",
-                        error: error
-                    });
-                    
-                    //Resolve with false to not send data
-                    return Promise.resolve(false);
-                }
-                else {
-                    //Reject if some error was defined earlier, as that means crucial data is missing
-                    return Promise.reject(errorMessage);
-                }
+                handleErrorMessage(error, "matchhistory");
                 
             //Send match history data
             }).then(function(data) {
@@ -592,22 +565,16 @@ var serverController = function(server, socket, api) {
                 
             }).then(function(data) {
                 server.emitData(socket, "mostplayed", data);
+                
+            }).catch(function(error) {
+                handleErrorMessage(error, "most played champions");
+                
+            }).then(function(data) {
             
             }).catch(function(error) {
                 //Handle error
                 console.log(error.stack);
-                
-                if(typeof errorMessage === 'undefined') {
-                    //An error message was not defined earlier, therefore we attempt to fetch the rest of the data as this data is not crucial
-                    errorMessage = "Could not fetch most played champions data";
-                    
-                    //Send error message
-                    server.emitData(socket, "error", {
-                        type: "matchhistory",
-                        error: error
-                    });
-                }
-                else {
+                if(typeof errorMessage != 'undefined') {
                     //Do not send an error if we just get a new game
                     if(!cancel) {
                         server.emitData(socket, "error", {
