@@ -47,4 +47,4 @@ run.bat
 node_modules/
 
 # Ignore config to keep api key secret
-api/config.js
+API/config.js
