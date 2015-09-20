@@ -141,7 +141,7 @@ var RiotAPI = function(settings) {
         
         //Display debug info
         if(timeRemaining > 0) {
-            console.log("Waiting: %s", timeRemaining);
+//            console.log("Waiting: %s", timeRemaining);
             this.waiting = true;
         }
         
@@ -297,6 +297,7 @@ var RiotAPI = function(settings) {
                 }
                 //Store in staticData object for future use
                 _this.staticData['version'] = data[0];
+                console.log(data[0]);
                 //Resolve promise
                 resolve(data);
             });
@@ -376,6 +377,7 @@ var RiotAPI = function(settings) {
             path: '/v1.2/champion',
             static: true,
             query: {
+                champData: 'info',
                 freeToPlay: ftp
             }
         });

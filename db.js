@@ -124,7 +124,7 @@ var Database = (function()
                 });
             },
             
-            //Updates the data in the database
+            //Inserts new data into the summoner_champ_stats table, which represents how a player performes on a specific champion
             //Uses the data from the RiotAPI unchanged
             updateChampData: function(data) {
                 return new Promise(function(resolve, reject) {
@@ -197,6 +197,118 @@ var Database = (function()
                             reject(error);
                         });
                     }
+                });
+            },
+            
+            insertMatches: function(summonerId, data) {
+                return new Promise(function(resolve, reject) {
+                    var sql = "INSERT IGNORE INTO game (gameId, gameCreation, queueType, season, platformId) VALUES";
+                    var participantSql = "INSERT IGNORE INTO participant (gameId, summonerId, championId, lane, role) VALUES";
+
+                    data['matches'].forEach(function(element, index) {
+                        //Insert the data into the SQL
+
+                        //Do not include an "and" in the first element
+                        if(index > 0) {
+                            sql += " ,";
+                            participantSql += " ,";
+                        }
+
+                        sql += " ('" + element.matchId + "', '" + element.timestamp + "', '" + element.queue + "', '" + element.season + "', '" + element.platformId + "')";
+                        participantSql += " ('" + element.matchId + "', '" + summonerId + "', '" + element.champion + "', '" + element.lane + "', '" + element.role + "')";
+                    });
+                    
+                    //Perform query
+                    connection.query(sql).then(function(rows) {
+                        return connection.query(participantSql);
+                    }).then(function(rows) {
+                        resolve(rows);
+                    }).catch(function(error) {
+                        reject(error);
+                    });
+                });
+            },
+            
+            getRoles: function(summonerId) {
+                return new Promise(function(resolve, reject) {
+                    var sql = "SELECT COUNT(summonerId) as games, summonerId, role, lane FROM `participant` WHERE summonerId = " + summonerId + " GROUP BY role, lane, summonerId";
+                    //Perform query
+                    connection.query(sql).then(function(rows) {
+                        resolve(rows);
+                    }).catch(function(error) {
+                        console.log(sql);
+                        reject(error);
+                    });
+                });
+            },
+            
+            logGameUpdate: function(summonerId) {
+                connection.query("UPDATE summoner_games_update SET lastUpdate=now()").catch(function(error) {
+                    console.log(sql);
+                    console.log(error.stack);
+                });
+            },
+            
+            getUpdateTimestamps: function(summonerIds) {
+                return new Promise(function(resolve, reject) {
+                    var sql = "SELECT * FROM summoner_games_update WHERE";
+
+                    summonerIds.forEach(function(element, index) {
+                        //Insert the data into the SQL
+
+                        //Do not include an "and" in the first element
+                        if(index > 0) {
+                            sql += " OR";
+                        }
+
+                        sql += " summonerId = " + element;
+                    });
+
+                    connection.query(sql).then(function(data) {
+                        var response = {};
+                        summonerIds.forEach(function(outer) {
+                            var found = false;
+                            data.forEach(function(inner) {
+                                if(outer == inner.summonerId) {
+                                    response[outer] = inner.lastUpdated;
+                                    found = true;
+                                }
+                            });
+                            
+                            if(!found) {
+                                response[outer] = 0;
+                            }
+                        });
+                        
+                        resolve(response);
+                    }).catch(function(error) {
+                        console.log(sql);
+                        reject(error);
+                    });
+                });
+            },
+            
+            updateChampionTable: function(data) {
+                return new Promise(function(resolve, reject) {
+                    var sql = "INSERT INTO champion (championId, name) VALUES";
+                    
+                    var i = 0;
+                    for (var property in data) {
+                        if (data.hasOwnProperty(property)) {
+                            if(i++ > 0) {
+                                sql += " ,";
+                            }
+                            sql += ' ("' + data[property].id + '", "' + (data[property].name) + '")';
+                        }
+                    }
+
+                    sql += " ON DUPLICATE KEY UPDATE championId=VALUES(championId), name=VALUES(name)";
+                    
+                    connection.query(sql).then(function(rows) {
+                        resolve(rows);
+                    }).catch(function(error) {
+                        reject(error);
+                    });
                 });
             }
         }

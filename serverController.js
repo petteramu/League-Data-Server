@@ -1,13 +1,18 @@
 var Database = require('./db.js');
+var config = require('./config.js');
+var Util = require('./utilities.js');
 var Promise = require('bluebird');
+var _ = require('underscore');
 
-var serverController = function(server, socket, api) {
+var serverController = function(server, socket, api, analysisController) {
     var server = server,
         socket = socket,
         data = data,
         champData,
         errorMessage = undefined,
         db = Database.getInstance(),
+        analysisController = analysisController,
+        utilities = new Util(),
         _this = this;
     
     //Initialize api connection
@@ -29,12 +34,10 @@ var serverController = function(server, socket, api) {
                 //Add version
                 apiData.version = api.staticData.version;
                 
-                
                 //Add readable data
                 apiData.readableQueue = api.readableQueues[apiData.gameQueueConfigId];
                 apiData.readableMap   = api.readableMaps[apiData.mapId];
                 
-
                 //Include the participant number in the response
                 apiData['participants'].forEach(function(pElement, index) {
                     gameData.pairs.forEach(function(summoner) {
@@ -147,6 +150,164 @@ var serverController = function(server, socket, api) {
                 
             }).catch(function(error) {
                 reject("Error getting champion data");
+            });
+        });
+    }
+    
+    //Creates a response for the player roles from a set of rows from the database
+    function createRoleResponse(data, gameObject) {
+        //Remember: all of the rows in "data" contains a the same "summonerId" value
+        var participant = _.find(gameObject.pairs, function(item) {
+            return item.summonerId == data[0].summonerId; 
+        });
+        
+        //Holds our response to the client
+        var response = {
+            summonerId: data[0].summonerId,
+            participantNo: participant.participantNo
+        };
+        
+        //Find the total amount of games
+        var totalGames = 0;
+        data.forEach(function(element) {
+          totalGames += element.games;
+        });
+        
+        //Create responses
+        data.forEach(function(element) {
+            response.summonerId = element.summonerId;
+            
+            //Find percentage
+            var percentage = (element.games * 100) / totalGames;
+
+            //Find a more suitable type of roles
+            var realRole = utilities.getRealRole(element.role, element.lane);
+            
+            if(_.has(response, realRole)) {
+                response[realRole].games = response[realRole].games + element.games;
+            }
+            else {
+                //Insert into response
+                response[realRole] = {
+                    role: realRole,
+                    games: element.games,
+                    percent: isNaN(percentage) ? 0 : percentage
+                }
+            }
+        });
+        
+        return response;
+    }
+    
+    function updateSummonerGames(region, summonerId, championIds, rankedQueues, seasons, beginTime, endTime, beginIndex, endIndex) {
+        return new Promise(function(resolve, reject) {
+            api.getMatchList(gameObject.region, summonerId, null, null, config.currentSeason, null, null, null, null).then(function(data) {
+                //Analyse the data
+                return analysisController.initializeMatchListAnalysis(summonerId, data);
+                
+            }, function(error) {
+                if(error === 404 || error === 422) {
+                    //Player has no games in the given queue ever or since the start of 2013
+                    
+                    //Log the update time
+                    db.logGameUpdate(summonerId);
+                    
+                    //Reject with 404 as the reason
+                    reject(404);
+                }
+                else {
+                    //TODO: handle better
+                    console.log(error);
+                }
+            
+            }).catch(function(error) {
+                //If we get here there was a problem in the analysiscontroller
+                reject(error);
+                
+            }).then(function(analysedData) {
+                //Return the newly found data
+                resolve(analysedData);
+            });
+        });
+    }
+    
+    function fetchMostPlayedRole(gameObject) {
+        return new Promise(function(resolve, reject) {
+            var promises = [];
+            
+            db.getUpdateTimestamps(_.pluck(gameObject.pairs, 'summonerId')).then(function(lastUpdates) {
+                
+                //Create the list of promises, one for each player
+                gameObject.pairs.forEach(function(summoner) {
+                    promises.push(
+                        new Promise(function(resolve, reject) {
+
+                            //Get any existing data from the database
+                            db.getRoles(summoner.summonerId).then(function(dbData) {
+
+                                //Fetch new data if none exists
+                                if(dbData.length == 0) {
+                                    updateSummonerGames(gameObject.region, summoner.summonerId, null, null, config.currentSeason, null, null, null, null).then(function(data) {
+                                        resolve(createRoleResponse(data, gameObject));
+
+                                    }).catch(function(error) {
+                                        reject(error);
+                                    });
+                                }
+                                //If there is data present, check how old it is
+                                else {
+                                    //Only update once every 24 hours(default)
+                                    if((new Date() - new Date(lastUpdates[summoner.summonerId])) / 1000 / 60 / 60 > config.updateIntevals.role) {
+                                        updateSummonerGames(gameObject.region,
+                                                            summoner.summonerId,
+                                                            null, null,
+                                                            config.currentSeason,
+                                                            new Date(lastUpdates[summoner.summonerId]).getTime() / 1000,
+                                                            null, null, null
+                                        ).then(function(data) {
+                                            resolve(createRoleResponse(data, gameObject));
+
+                                        }).catch(function(error) {
+                                            reject(error);
+                                        });
+
+                                    }
+                                    //Does not need updating, continue to send the data as is
+                                    else {
+                                        //Resolve the promise
+                                        resolve(createRoleResponse(dbData, gameObject));
+                                    }
+                                }
+
+                            });
+                        })
+                    );
+                });
+
+                //Wait for all the calls to finish
+                Promise.settle(promises).then(function(data) {
+                    var responseData = [];
+                    
+                    data.forEach(function(promise) {
+                        if(promise.isFulfilled()) {
+                            responseData.push(promise.value());
+                        }
+                    });
+                    
+                    //Create
+                    var response = {
+                        data: responseData,
+                        //Add version data to the response
+                        version: api.staticData.version
+                    };
+                    
+                    //Ready to send back to client
+                    resolve(response);
+
+                });
+            
+            }).catch(function(error) {
+                reject(error);
             });
         });
     }
@@ -425,13 +586,12 @@ var serverController = function(server, socket, api) {
         return gameObject = {
             pairs: summonerChampPairs,
             gameType: gameType,
-            region: region
+            region: region,
+            gameId: data.gameId
         }
     }
         
     function handleErrorMessage(error, location) {
-        console.log(error.stack);
-
         //Handle error
         if(typeof errorMessage === 'undefined') {
             //An error message was not defined earlier, therefore we attempt to fetch the rest of the data as this data is not crucial
@@ -474,9 +634,7 @@ var serverController = function(server, socket, api) {
             //Get the summonerId of the player
             api.getSummonerByName(region, name)
             .catch(function(error) {
-                //Handle the error
-                console.log(error.stack);
-                
+                //Handle the error                
                 //Set the errormessage so no future errors are created
                 errorMessage = "No summoner by that name";
                 
@@ -485,7 +643,6 @@ var serverController = function(server, socket, api) {
                 
             }).then(function(data) {
                 //Continue with getting the actual game data
-                console.log(data);
                 return api.getCurrentGame(region, data[name]['id']);
                 
             }).catch(function(error) {
@@ -498,7 +655,6 @@ var serverController = function(server, socket, api) {
                 }
                 
                 //Handle the error
-                console.log(error.stack);
                 
                 //If an error message is already defined, it means it is passed from a previous promise.
                 errorMessage = (typeof errorMessage === 'undefined') ? "Summoner currently not in a game" : errorMessage; 
@@ -516,9 +672,7 @@ var serverController = function(server, socket, api) {
                 return fetchCoreData(data, gameObject, region);
                 
             }).catch(function(error) {
-                //Handle error
-                console.log(error.stack);
-                
+                //Handle error                
                 errorMessage = (typeof errorMessage === 'undefined') ? "Could not fetch core data" : errorMessage;
                 
                 return Promise.reject(errorMessage);
@@ -530,7 +684,7 @@ var serverController = function(server, socket, api) {
                 return fetchLeagueData(gameObject);
                 
             }).catch(function(error) {
-                handleErrorMessage(error, "league");
+                return handleErrorMessage(error, "league");
                 
             //Send league data and proceed
             }).then(function(data) {
@@ -539,9 +693,10 @@ var serverController = function(server, socket, api) {
                 
                 //Get statistics on the champions each play plays
                 return fetchChampData(gameObject);
+//                return Promise.resolve();
             
             }).catch(function(error) {
-                handleErrorMessage(error, "champion");
+                return handleErrorMessage(error, "champion");
                 
             //Send champ data and proceed
             }).then(function(data) {
@@ -550,9 +705,10 @@ var serverController = function(server, socket, api) {
                 
                 //Send the match history of each player
                 return fetchMatchHistory(gameObject);
+//                return Promise.resolve();
                 
             }).catch(function(error) {
-                handleErrorMessage(error, "matchhistory");
+                return handleErrorMessage(error, "matchhistory");
                 
             //Send match history data
             }).then(function(data) {
@@ -562,15 +718,18 @@ var serverController = function(server, socket, api) {
                 //Fetch the most played champions of each player
                 var numberOfTopChamps = 5; //TODO: Create config file
                 return fetchMostPlayedChampions(gameObject, numberOfTopChamps);
+//                return Promise.resolve();
                 
             }).then(function(data) {
                 server.emitData(socket, "mostplayed", data);
                 
+                return fetchMostPlayedRole(gameObject);
             }).catch(function(error) {
-                handleErrorMessage(error, "most played champions");
+                return handleErrorMessage(error, "most played champions");
                 
             }).then(function(data) {
-            
+                server.emitData(socket, "roles", data);
+                
             }).catch(function(error) {
                 //Handle error
                 console.log(error.stack);
