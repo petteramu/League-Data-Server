@@ -131,7 +131,7 @@ var Database = (function()
                     //Create query
                     if(typeof data !== 'undefined' && typeof data['champions'] !== 'undefined') {
                         var query = "INSERT INTO summoner_champ_stats (summonerId, championId, wins, losses, kills, deaths, assists) VALUES";
-                    //Add stats to query
+                        //Add stats to query
 
                         for(var ii = 0; ii < data['champions'].length; ii++) {
                             var element = data['champions'][ii];

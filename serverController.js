@@ -164,7 +164,8 @@ var serverController = function(server, socket, api, analysisController) {
         //Holds our response to the client
         var response = {
             summonerId: data[0].summonerId,
-            participantNo: participant.participantNo
+            participantNo: participant.participantNo,
+            roles: {}
         };
         
         //Find the total amount of games
@@ -175,7 +176,6 @@ var serverController = function(server, socket, api, analysisController) {
         
         //Create responses
         data.forEach(function(element) {
-            response.summonerId = element.summonerId;
             
             //Find percentage
             var percentage = (element.games * 100) / totalGames;
@@ -188,10 +188,10 @@ var serverController = function(server, socket, api, analysisController) {
             }
             else {
                 //Insert into response
-                response[realRole] = {
+                response.roles[realRole] = {
                     role: realRole,
                     games: element.games,
-                    percent: isNaN(percentage) ? 0 : percentage
+                    percent: isNaN(percentage) ? 0 : percentage.toFixed(1)
                 }
             }
         });
@@ -437,20 +437,26 @@ var serverController = function(server, socket, api, analysisController) {
                 });
                 
                 //Wait for the promises to finish
-                Promise.all(promises).then(function(data) {
-                    //Update the data
-                    if(data.length > 0) {
-                        data.forEach(function(element) {
-                            db.updateChampData(element);
-                        });
-                        
-                        //Resolve with the new data from the API
-                        resolve();
-                        return;
-                    }
+                Promise.settle(promises).then(function(settledPromises) {
+                    var amountUpdated = 0;
                     
+                    settledPromises.forEach(function(promise) {
+                        //Check if the promise was resolved
+                        if(promise.isResolved()) {
+                            //Update the data if there are data present
+                            db.updateChampData(promise.value());
+                            amountUpdated += 1;
+                        }
+                    });
+                    
+                    //Resolve the promise if some data were updated
+                    if(amountUpdated) {
+                        resolve();
+                    }
                     //If no data was fetched from the API, reject the promise
-                    reject();
+                    else {
+                        reject();
+                    }
                     
                 }).catch(function(error) {
                     reject(error);
