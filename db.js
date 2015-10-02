@@ -27,19 +27,23 @@ var Database = (function()
         
         //Everything inside is public
         return {
-            getSummonerLeagueData: function(gameData) {
+            /**
+             * Gets the league information on a list of summoners
+             * @param {List} summoners
+             */
+            getSummonerLeagueData: function(summoners, queueType) {
                 return new Promise(function(resolve, reject) {
                     //Create query
                     var query = "SELECT * FROM summoner_league WHERE (";
                     //Add each player to the query
-                    for(var i = 0; i < gameData.pairs.length; i++) {
+                    for(var i = 0; i < summoners.length; i++) {
                         if(i > 0)
                             query += " OR ";
-                        query += "summonerId = " + gameData.pairs[i].summonerId;
+                        query += "summonerId = " + summoners[i].summonerId;
                     }
                     //Add queuetype
-                    query += ") AND queueType = '" + gameData.gameType + "'";
-
+                    query += ") AND queueType = '" + queueType + "'";
+                    console.info(query);
                     //Perform query
                     connection.query(query).then(function(rows) {
                         resolve(rows);
@@ -50,7 +54,7 @@ var Database = (function()
             },
             
             //Returns statistics on how a player does on a champions
-            getSummonerChampData: function(gameData) {
+            getSummonerChampData: function(summoners) {
                 return new Promise(function(resolve, reject) {
                     //Create query
                     var query = "SELECT * FROM summoner_champ_stats s";
@@ -59,10 +63,10 @@ var Database = (function()
                         WHERE ";
                     
                     //Add each summoner to the query
-                    for(var i = 0; i < gameData.pairs.length; i++) {
+                    for(var i = 0; i < summoners.length; i++) {
                         if(i > 0)
                             query += " OR ";
-                        query += "(s.summonerId = " + gameData.pairs[i].summonerId + " AND s.championId = " + gameData.pairs[i].championId + ")";
+                        query += "(s.summonerId = " + summoners[i].summonerId + " AND s.championId = " + summoners[i].championId + ")";
                     }
                     
                     //Perform query
@@ -74,21 +78,28 @@ var Database = (function()
                 });
             },
             
-            getSummonerMostPlayed: function(gameData, amount) {
+            /**
+             * Fetches a list of summoners most played champions
+             * Will have rows with summonerId | championId | wins | losses | kills | deaths | assists | games | championId | name
+             * @param {List<Summoners>} summoners
+             * @param {Integer} amount The amount of most played champions
+             * @return {Promise} A Promise that resolves with the rows
+             */
+            getSummonerMostPlayed: function(summoners, amount) {
                 return new Promise(function(resolve, reject) {
                     //Create query
                     var query = "SELECT * FROM(";
                     var i;
                     
                     //Add each player to the subquery
-                    for(i = 0; i < gameData['pairs'].length; i++) {
+                    for(i = 0; i < summoners.length; i++) {
                         query += "(SELECT summonerId, championId, wins, losses, kills, deaths, assists, (wins+losses) as games\
-                            FROM summoner_champ_stats champion_averages_stats\
-                            WHERE summonerId = " + gameData['pairs'][i].summonerId + " and championId != 0\
+                            FROM summoner_champ_stats\
+                            WHERE summonerId = " + summoners[i].summonerId + " and championId != 0\
                             ORDER BY games DESC\
-                            LIMIT 5)";
+                            LIMIT " + amount + ")";
                         //Add union if not the last iteration
-                        if(i < gameData['pairs'].length-1) {
+                        if(i < summoners.length-1) {
                             query += "UNION ALL";
                         }
                     }
@@ -261,7 +272,7 @@ var Database = (function()
                             sql += " OR";
                         }
 
-                        sql += " summonerId = " + element;
+                        sql += " summonerId = '" + element + "'";
                     });
 
                     connection.query(sql).then(function(data) {

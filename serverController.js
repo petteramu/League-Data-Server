@@ -555,7 +555,7 @@ var serverController = function(server, socket, api, analysisController) {
                     //Resolve with data
                     resolve(response);
                     
-                //Handle errors returned from champion data    
+                //Handle errors returned from champion data
                 }).catch(function(error) {
                 console.log("Error in most played: %s", err);
                     reject(error);

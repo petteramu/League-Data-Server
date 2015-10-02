@@ -1,6 +1,6 @@
 var Promise = require('bluebird');
-var config  = require('./config.js');
-var Database= require('./db.js');
+var config  = require('../Config/config.js');
+var Database= require('../db.js');
 
 var analysisController = function(api) {
     var db = Database.getInstance();

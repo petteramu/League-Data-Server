@@ -3,38 +3,15 @@
 var app = require('express')();
 var httpserver = require('http').Server(app);
 var io = require('socket.io')(httpserver);
-var RiotAPI = require('./API/api.js');
-var Database = require('./db.js');
-var serverController = require('./serverController.js');
-var AnalysisController = require('./analysisController.js');
+var ServerController = require('./Controllers/ServerController.js');
 
 var server = function() {
 
-    var instance = this;
-    var server_port = process.env.OPENSHIFT_NODEJS_PORT || 8080;
-    var server_ip   = process.env.OPENSHIFT_NODEJS_IP   || '127.0.0.1';
+    var instance = this,
+        server_port = process.env.OPENSHIFT_NODEJS_PORT || 8080,
+        server_ip   = process.env.OPENSHIFT_NODEJS_IP   || '127.0.0.1',
+        serverController = new ServerController(this);
     io.set('origins', '*:*');
-    
-    var connections = [];
-    
-    //Initialize api connection
-    var api = new RiotAPI({
-        secure: true,
-        debug: false
-    });
-    
-    //Create analysis controller
-    var analysisController = new AnalysisController();
-
-    //Update champion base in db
-    api.getChampionsData('euw').then(function(data) {
-        return Database.getInstance().updateChampionTable(data['data']);
-    }).then(function(rows) {
-        console.log("Static champion data updated successfully");
-    }).catch(function(error) {
-        console.log("Error while updating static champion data");
-        console.log(error.stack);
-    });
     
     //Start listening
     httpserver.listen(server_port, server_ip, function() {
@@ -50,14 +27,17 @@ var server = function() {
     function addListeners(socket) {
         socket.on('get:currentgame', function(data) {
             console.log( "- Request received for current game data: " + socket.request );
-            var controller = new serverController(instance, socket, api, analysisController);
-            controller.createCurrentGameData(data);
+            
+            //Normalize name
+            var name = data.name.toLowerCase().replace(" ", ""),
+                region = data.region || 'euw'
+            
+            serverController.requestGameInformation(socket, name, region);
         });
-        
-        socket.on('get:randomgame', function(data) {
-            console.log( "- Request received for random game data: " + socket.request );
-            var controller = new serverController(instance, socket, api, analysisController);
-            controller.getRandomFeaturedGame(data);
+                
+        //Log disconnects
+        socket.on('disconnect', function() {
+            console.log('Got disconnect!');
         });
     }
     
