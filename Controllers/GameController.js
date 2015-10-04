@@ -1,16 +1,22 @@
 var DataFormatter = require('../Data/DataFormatter.js'),
+    DataHandler = require('../Data/DataHandler.js'),
     Summoner = require('../Model/Summoner.js'),
     GameSubscriber = require('../Model/GameSubscriber.js'),
     Promise = require('bluebird'),
-    config = require('../Config/config.js');
+    config = require('../Config/config.js'),
+    AnalysisController = require('./AnalysisController.js'),
+    RiotAPI = require('../API/RiotAPI.js');
 
-var GameController = function(coreData, region, serverController, dataHandler, analysisController) {console.log(serverController);
-    var serverController = serverController,
-        ACInstance = analysisController,
-        gameId = gameId,
+/**
+ * This is the controller for the games. Each instance represents one game.
+ * Its responsibilities are to have an overview of subscribers to a game,
+ * cache the data, and send it once it has been fetched.
+ * @param {Object} coreData The core data of a game
+ * @param {region} region
+ */
+var GameController = function(coreData, region) {
+    var gameId = gameId,
         region = region,
-        dh = dataHandler,
-        formatter = new DataFormatter(),
         champData;
     
     //Cache object
@@ -29,20 +35,19 @@ var GameController = function(coreData, region, serverController, dataHandler, a
      * @param {Object} data
      */
     function emitData(stage, data) {
-        var socketList = []; //Holds the subscribers that are to receive this data
+        var wrap = {};
+        wrap[stage] = data;
         
+        console.log("Sending " + stage);
         //Find the subscribers that require this data
         subscribers.forEach(function(subscriber) {
             if(!subscriber.stages[stage]) {
-                //Add to reciever list
-                socketList.push(subscriber.socket);
-                
                 //Set the stage to sent
                 subscriber.setStage(stage, true);
+                
+                subscriber.socket.emit("message", wrap);
             }
         });
-        
-        serverController.emitData(socketList, stage, data);
     }
     
     /**
@@ -56,7 +61,8 @@ var GameController = function(coreData, region, serverController, dataHandler, a
                && !subscriber.stages[property]
                && cache[property]) {
                 //Send data since it has not been sent yet
-                serverController.emitData(subscriber.socket, property, cache[property]);
+                console.log(1);
+                subscriber.socket.emit(property, cache[property]);
             }
         }
     }
@@ -69,7 +75,7 @@ var GameController = function(coreData, region, serverController, dataHandler, a
         //Starts the process of creating data on the given game
 
         //Get statistics on the leagues of each player
-        dh.fetchLeagueData(getSummonerList(), cache.core.gameType).catch(function(error) {
+        DataHandler.fetchLeagueData(getSummonerList(), cache.core.gameType).catch(function(error) {
             return handleErrorMessage(error, "league");
             
         //Send league data and proceed
@@ -78,12 +84,12 @@ var GameController = function(coreData, region, serverController, dataHandler, a
             //We continue because it is not crucial data, and the rest should still be sent.
             if(data !== false) {
                 //Store data
-                cache.league = formatter.formatLeagueData(data, getSummonerList());
+                cache.league = DataFormatter.formatLeagueData(data, getSummonerList());
                 emitData("league", cache.league);
             }
 
             //Get statistics on the champions each play plays
-            return dh.fetchChampionData(getSummonerList());
+            return DataHandler.fetchChampionData(getSummonerList());
 
         }).catch(function(error) {
             return handleErrorMessage(error, "champion");
@@ -94,12 +100,12 @@ var GameController = function(coreData, region, serverController, dataHandler, a
             //We continue because it is not crucial data, and the rest should still be sent.
             if(data !== false) {
                 //Store data
-                cache.champion = formatter.formatChampData(data, getSummonerList());
+                cache.champion = DataFormatter.formatChampData(data, getSummonerList());
                 emitData("champion", cache.champion);
             }
 
             //Send the match history of each player
-            return dh.fetchMatchHistory(getSummonerList(), champData);
+            return DataHandler.fetchMatchHistory(getSummonerList(), champData);
 
         }).catch(function(error) {
             return handleErrorMessage(error, "matchhistory");
@@ -115,7 +121,7 @@ var GameController = function(coreData, region, serverController, dataHandler, a
             }
 
             //Fetch the most played champions of each player
-            return dh.fetchMostPlayedChampions(getSummonerList(), config.numberOfTopChampions);
+            return DataHandler.fetchMostPlayedChampions(getSummonerList(), config.numberOfTopChampions);
             
         }).catch(function(error) {
             return handleErrorMessage(error, "most played champions");
@@ -126,11 +132,11 @@ var GameController = function(coreData, region, serverController, dataHandler, a
             //We continue because it is not crucial data, and the rest should still be sent.
             if(data !== false) {
                 //Store data
-                cache.mostplayed = formatter.formatMostPlayedChampions(data, getSummonerList());
+                cache.mostplayed = DataFormatter.formatMostPlayedChampions(data, getSummonerList());
                 emitData("mostplayed", cache.mostplayed);
             }
 
-            return dh.fetchMostPlayedRole(getSummonerList());
+            return DataHandler.fetchMostPlayedRole(getSummonerList());
             
         }).catch(function(error) {
             return handleErrorMessage(error, "most played roles");
@@ -140,7 +146,7 @@ var GameController = function(coreData, region, serverController, dataHandler, a
             //We continue because it is not crucial data, and the rest should still be sent.
             if(data !== false) {
                 //Store data
-                cache.roles = formatter.formatRoleData(data);
+                cache.roles = DataFormatter.formatRoleData(data);
                 emitData("roles", cache.roles);
             }
 
@@ -195,12 +201,12 @@ var GameController = function(coreData, region, serverController, dataHandler, a
     //Constructor
     (function() {
         //Get the champion data
-        dh.getStaticChampionData().then(function(championData) {
+        DataHandler.getStaticChampionData().then(function(championData) {
             //Store data
             champData = championData;
             
             //Format core data then begin retreiving data
-            return formatter.formatCoreData(coreData, championData, region, dh.version);
+            return DataFormatter.formatCoreData(coreData, championData, region, RiotAPI.staticData.version);
             
         }).then(function(formatted) {
             //Save the data

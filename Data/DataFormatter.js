@@ -3,7 +3,7 @@ var Promise = require('bluebird'),
     Readables = require('../Utils/Readables.js'),
     Summoner = require('../Model/Summoner.js');
 
-var DataFormatter = function() {
+var DataFormatter = (function() {
     return {
         /**
          * Formats the core data into a better structure with only the needed information
@@ -190,6 +190,6 @@ var DataFormatter = function() {
             return response;
         }
     }
-};
+}());
 
 module.exports = DataFormatter;

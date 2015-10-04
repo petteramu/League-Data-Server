@@ -5,17 +5,13 @@ var config = require('../Config/config.js'),
     _ = require('underscore'),
     AnalysisController = require('./AnalysisController.js'),
     GameController = require('./GameController.js'),
-    DataHandler = require('../Data/DataHandler.js');
+    DataHandler = require('../Data/DataHandler.js'),
+    Server = require('../server.js');
 
-var ServerController = function(server) {
+var ServerController = (function() {
     var gameControllers,
         sockets,
-        socketGamePairs,
-        api,
-        analysisController,
-        dh,
-        server = server,
-        _public = {};
+        socketGamePairs;
     
     //Holds a list of game controllers, and contain information on which game they represent
     gameControllers = {};
@@ -26,24 +22,13 @@ var ServerController = function(server) {
     //Socket GameController pairs
     socketGamePairs = {};
 
-    //Initialize an api connection
-    api = new RiotAPI({
-        secure: true,
-        debug: false
-    });
     //Keep alive on the server
     //Should be unnecessary when the analysis controller is done
     setInterval(function() { console.log("Keep alive"); }, 600000);
 
-    //Create analysis controller
-    analysisController = new AnalysisController();
-
-    //Create a DataHandler
-    dh = new DataHandler(api, analysisController);
-
-    dh.updateChampionsData();
+    DataHandler.updateChampionsData();
     
-    function findGameController(gameId) {
+    var findGameController = function(gameId) {
         //Find controller
         if(gameControllers.hasOwnProperty(gameId)) {
             return gameControllers[gameId];
@@ -55,8 +40,8 @@ var ServerController = function(server) {
     
     /**
      * Adds a socket to the GameController representing the game that the socket requested
-     **/
-    _public.requestGameInformation = function(socket, searchedName, region) {
+     */
+    var requestGameInformation = function(socket, searchedName, region) {
         //Remove previous subscription
         if(socketGamePairs.socket) {
             socketGamePairs.socket.removeSubscriber(socket);
@@ -65,7 +50,7 @@ var ServerController = function(server) {
         var errorObject;
 
         //Find the summonerId from the name
-        api.getSummonerByName(region, searchedName).catch(function(error) {
+        RiotAPI.getSummonerByName(region, searchedName).catch(function(error) {
             console.log(error.stack);
             console.log(error);
             //Could not find a player with this name
@@ -77,7 +62,7 @@ var ServerController = function(server) {
 
         }).then(function(summonerData) {
             //Find the game and id
-            return api.getCurrentGame(region, summonerData[searchedName]['id']);
+            return RiotAPI.getCurrentGame(region, summonerData[searchedName]['id']);
 
         }).catch(function(error) {
             console.log(error.stack);
@@ -98,7 +83,7 @@ var ServerController = function(server) {
 
             //Create if it does not exist
             if(!gc) {
-                gc = new GameController(gameData, region, _public, dh, analysisController);
+                gc = new GameController(gameData, region);
                 gameControllers[gameData['gameId']] = gc;
             }
 
@@ -108,25 +93,13 @@ var ServerController = function(server) {
         }).catch(function(error) {
             console.log(error.stack);
             //Emit the error message
-            server.emitData(socket, "error", error);
+            Server.emitData(socket, "error", error);
         });
     }
-
-    /**
-     * Asks the server to send some data to a given socket
-     */
-    _public.emitData = function(socketList, type, data) {
-        if(socketList.constructor === Array) {
-            socketList.forEach(function(socket) {
-                server.emitData(socket, type, data);
-            });
-        }
-        else {
-            server.emitData(socketList, type, data);
-        }
-    }
     
-    return _public;
-};
+    return {
+        requestGameInformation: requestGameInformation
+    }
+}());
 
 module.exports = ServerController;

@@ -1,52 +1,54 @@
 "use strict";
 
-var req = require("request-promise");
-var errors = require('request-promise/errors');
-var url = require('url');
-var Promise = require('bluebird');
-var config = require('./config.js');
+var req = require("request-promise"),
+    errors = require('request-promise/errors'),
+    url = require('url'),
+    Promise = require('bluebird'),
+    config = require('./config.js');
 
-var RiotAPI = function(settings) {
-    this.debug  = settings.debug  || false;
+var RiotAPI = (function() {
+    //Holds the static data that are downloaded for future re-use
+    var staticData = {};
+    
+    var debug = false;
     
     //Https or http
-    this.secure = settings.secure || false;
+    var secure = true;
     
     //The standard host
-    this.host   = settings.host   || 'euw.api.pvp.net';
+    var host = 'euw.api.pvp.net';
     
     //The path in global
-    this.globalPath = settings.globalPath || 'global.api.pvp.net';
+    var globalPath = 'global.api.pvp.net';
     
     //Path, used to create urls
-    this.localPath  = settings.localPath || '/api/lol/';
+    var localPath ='/api/lol/';
     
     //API key
-    this.key   = settings.key || config.apiKey;
+    var key = config.apiKey;
     
     //The queue that holds the requests
-    this.queue = [];
+    var queue = [];
     
     //Whether or not the queue is being executed
-    this.executing = false;
-    
-    //Holds the static data that are downloaded for future re-use
-    this.staticData = {};
+    var executing = false;
     
     //Non-static cache
-    this.cache = {};
+    var cache = {};
     
     //The time that is forced between two calls
     //Mainly used to account for the time taken between adding a stamp and the actual call being made in the riot db
-    this.forcedTimeBetweenCalls = settings.forcedTimeBetweenCalls || 50;
+    var forcedTimeBetweenCalls = 50;
     
+    //A reference to whether or not the API is waiting for a request to finish
+    var waiting = false;
     
     //Rate limit functions
     //Array holding the timestamps of recently made requests
-    this.timestamps = [];
+    var timestamps = [];
     
-    //Different rate limits
-    this.limits = [{
+    //Rate limits
+    var limits = [{
         maxCalls: 10,
         maxTime: 10
     }, {
@@ -55,23 +57,23 @@ var RiotAPI = function(settings) {
     }];
     
     //Find the largest maxCalls and set it to limit the amount of timestamps
-    this.timestampLimit = 0;
-    for(var i = 0; i < this.limits.length; i++) {
-        if(this.limits[i].maxCalls > this.timestampLimit)
-            this.timestampLimit = this.limits[i].maxCalls;
+    var timestampLimit = 0;
+    for(var i = 0; i < limits.length; i++) {
+        if(limits[i].maxCalls > timestampLimit)
+            timestampLimit = limits[i].maxCalls;
     };
     
     //Finds the time remaining for either the limit per 10min or 10s, dependent on which is longer
-    this.getTimeRemaining = function() {
+    var getTimeRemaining = function() {
         debugger;
         var remaining = []; //Array holding the different values for the time remaining
         
         //Iterate each limit and find the time remaining for each
-        for(var i = 0; i < this.limits.length; i++) {
-            var limitObj = this.limits[i];
+        for(var i = 0; i < limits.length; i++) {
+            var limitObj = limits[i];
             
-            if(this.timestamps.length >= limitObj.maxCalls) {
-                remaining.push((limitObj.maxTime * 1000) - (new Date() - this.timestamps[limitObj.maxCalls-1]) + this.forcedTimeBetweenCalls); //In milliseconds
+            if(timestamps.length >= limitObj.maxCalls) {
+                remaining.push((limitObj.maxTime * 1000) - (new Date() - timestamps[limitObj.maxCalls-1]) + forcedTimeBetweenCalls); //In milliseconds
 
             } else {
                 remaining.push(0);
@@ -82,20 +84,19 @@ var RiotAPI = function(settings) {
     }
     
     //Adds a timestamp
-    this.addStamp = function(timestamp) {
+    var addStamp = function(timestamp) {
         //Remove if at max calls
-        if(this.timestamps.length == this.timestampLimit) this.timestamps.pop();
+        if(timestamps.length == timestampLimit) timestamps.pop();
         
         //Increase the delay a little
         var newDate = new Date(timestamp);
         
         //Insert at the start
-        this.timestamps.unshift(newDate);
+        timestamps.unshift(newDate);
     }
-    
             
     //Adds a url to the request queue and start executing the queue if its not already executing
-    this.addToQueue = function(url, cb) {
+    var addToQueue = function(url, cb) {
         //Create queueitem
         var item = {
             url: url,
@@ -103,64 +104,60 @@ var RiotAPI = function(settings) {
         };
         
         //Insert element
-        this.queue.push(item);
+        queue.push(item);
         
         //Execute queue if the new promise is the only one in it
-        if(!this.executing) this.executeNext();
+        if(!executing) executeNext();
     };
     
     //Gets the next item in the queue of null
-    this.getNextItem = function() {
+    var getNextItem = function() {
         //If the queue is not empty return an item
-        if(this.queue.length > 0) return this.queue.pop();
+        if(queue.length > 0) return queue.pop();
         //If it is empty return null    
         else return null;
     }
 
     //Execute the next item in the queue
-    this.executeNext = function() {
+    var executeNext = function() {
         //Do not execute another if there is a request in the waiting
         //This forces the queue to only execute one reques at a time
-        if(this.waiting) return;
+        if(waiting) return;
         
         //Set that the API is executing a request
-        this.executing = true;
+        executing = true;
         
         //Get next item
-        var item = this.getNextItem();
+        var item = getNextItem();
         
         //Only execute if the queue is not empty
         if(item === null) {
             //No longer executing
-            this.executing = false;
+            executing = false;
             return;
         }
         
         //Check if the rate limit is reached
-        var timeRemaining = this.getTimeRemaining();
+        var timeRemaining = getTimeRemaining();
         
         //Display debug info
         if(timeRemaining > 0) {
 //            console.log("Waiting: %s", timeRemaining);
-            this.waiting = true;
+            waiting = true;
         }
         
         //Run again after a delay
-        var _this = this;
         setTimeout(function() {
-            _this.waiting = false;
-            _this.makeRequest(item.url, item.callback);
+            waiting = false;
+            makeRequest(item.url, item.callback);
         }, timeRemaining);
     }
     
     //Makes an actual request
-    this.makeRequest = function(url, cb) {
-        
-        //Create reference to this
-        var _this = this;
+    var makeRequest = function(url, cb) {
         
         //Display debug info it is wished
-        if (this.debug){
+        if (debug){
             console.log('Calling url', url);
         }
 
@@ -170,7 +167,7 @@ var RiotAPI = function(settings) {
             method: 'GET'
         };
         
-        _this.addStamp(new Date());
+        addStamp(new Date());
         req.get(options).then(function(data) {
             
             //Return as JSON if it is in json format
@@ -185,7 +182,7 @@ var RiotAPI = function(settings) {
             }
             finally {
                 //Proceed in the queue
-                _this.executeNext();
+                executeNext();
             }
             
         }).catch(errors.StatusCodeError, function(error) {
@@ -193,53 +190,53 @@ var RiotAPI = function(settings) {
             cb(error);
             console.log(error.statusCode);
             //Proceed in the queue
-            _this.executeNext();
+            executeNext();
             
         }).catch(errors.RequestError, function(error) {
             //Reject
             cb(error);
+            console.log(error.stack);
             
             //Proceed in the queue
-            _this.executeNext();
+            executeNext();
             
         });
     }
     
     //Creates the url of the request
-    this.generateUrl = function (options) {
-
+    var generateUrl = function(options) {
         if(options && options.query){
-            options.query.api_key = this.key;
+            options.query.api_key = key;
         } else {
-            options.query = {api_key: this.key};
+            options.query = {api_key: key};
         }
         
         var result;
         if(options.observer != undefined && options.observer == true) {
             result = url.format({
-                protocol: (this.secure) ? 'https:' : 'http:',
-                host: this.host + options.path,
+                protocol: (secure) ? 'https:' : 'http:',
+                host: host + options.path,
                 query: options.query
             });
         }
         else if(options.global) {
             result = url.format({
-                protocol: (this.secure) ? 'https:' : 'http:',
-                host: this.globalPath + this.localPath + options.path,
+                protocol: (secure) ? 'https:' : 'http:',
+                host: globalPath + localPath + options.path,
                 query: options.query
             });
         }
         else if(options.static) {
             result = url.format({
-                protocol: (this.secure) ? 'https:' : 'http:',
-                host: this.globalPath + this.localPath + "static-data/" + options.region + options.path,
+                protocol: (secure) ? 'https:' : 'http:',
+                host: globalPath + localPath + "static-data/" + options.region + options.path,
                 query: options.query
             });
         }
         else {
             result = url.format({
-                protocol: (this.secure) ? 'https:' : 'http:',
-                host: this.host + this.localPath +  options.region + options.path,
+                protocol: (secure) ? 'https:' : 'http:',
+                host: host + localPath +  options.region + options.path,
                 query: options.query
             });
         }
@@ -249,14 +246,11 @@ var RiotAPI = function(settings) {
     };
     
     //Creates a promise which adds an url to a queue and resolves when the request has been made
-    this.createPromise = function(url) {
-        //Helper
-        var _this = this;
-        
+    var createPromise = function(url) {        
         //Create and return promise
         return new Promise(function(resolve, reject) {
             
-            _this.addToQueue(url, function(err, data) {
+            addToQueue(url, function(err, data) {
                 
                 //Handle error
                 if(err) {
@@ -275,12 +269,9 @@ var RiotAPI = function(settings) {
     ////////////
     
     //Gets the current version of lol. Notice: not the version of the API
-    this.getCurrentVersion = function (region) {
-        //Helper
-        var _this = this;
-        
+    var getCurrentVersion = function(region) {    
         //Create url
-        var url = _this.generateUrl({
+        var url = generateUrl({
             region: region,
             global: true,
             path: 'static-data/' + region +'/v1.2/versions/'
@@ -289,14 +280,14 @@ var RiotAPI = function(settings) {
         //Create and return the promise
         return new Promise(function(resolve, reject) {
             //We can call this method directly since its a static endpoint and it does not count towards the rate limit
-            _this.makeRequest(url, function(err, data) {
+            makeRequest(url, function(err, data) {
                 //Handle errors
                 if(err) {
                     reject(err);
                     return;
                 }
                 //Store in staticData object for future use
-                _this.staticData['version'] = data[0];
+                staticData['version'] = data[0];
                 console.log(data[0]);
                 //Resolve promise
                 resolve(data);
@@ -306,11 +297,7 @@ var RiotAPI = function(settings) {
     
     //The match list endpoint of the API
     //Returns a set of matches(API forces a maximum of 20)
-    this.getMatchList = function(region, summonerId, championIds, rankedQueues, seasons, beginTime, endTime, beginIndex, endIndex) {
-        
-        //Helper
-        var _this = this;
-        
+    var getMatchList = function(region, summonerId, championIds, rankedQueues, seasons, beginTime, endTime, beginIndex, endIndex) {
         var query = {};
         if(region) query.region = region;
         if(summonerId) query.summonerId = summonerId;
@@ -323,56 +310,56 @@ var RiotAPI = function(settings) {
         if(endIndex) query.endIndex = endIndex;
         
         //Create url
-        var url = _this.generateUrl({
+        var url = generateUrl({
             region: region,
             path: '/v2.2/matchlist/by-summoner/' + summonerId,
             query: query
         });
         
-        return this.createPromise(url);
+        return createPromise(url);
     }
     
     //Gets the current game data for a summoner
-    this.getCurrentGame = function (region, summonerId) {
+    var getCurrentGame = function(region, summonerId) {
         //Create url
-        var url = this.generateUrl({
+        var url = generateUrl({
             region: region,
             //Is from the observer endpoints
             observer: true,
-            path: '/observer-mode/rest/consumer/getSpectatorGameInfo/' + this.platforms[region] + '/' + summonerId
+            path: '/observer-mode/rest/consumer/getSpectatorGameInfo/' + platforms[region] + '/' + summonerId
         });
         
-        return this.createPromise(url);
+        return createPromise(url);
     };
     
     //Gets a list of featured games
-    this.getFeaturedGames = function(region) {
+    var getFeaturedGames = function(region) {
         //Create url
-        var url = this.generateUrl({
+        var url = generateUrl({
             region: region,
             //Is from the observer endpoints
             observer: true,
             path: '/observer-mode/rest/featured'
         });
         
-        return this.createPromise(url);
+        return createPromise(url);
     };
     
     //Gets the recent games by a summoner(any type)
-    this.getRecentGamesBySummonerId = function (region, summonerId) {
+    var getRecentGamesBySummonerId = function(region, summonerId) {
         //Create url
-        var url = this.generateUrl({
+        var url = generateUrl({
             region: region,
             path: '/v1.3/game/by-summoner/' + summonerId + '/recent'
         });
-        return this.createPromise(url);
+        return createPromise(url);
     };
     
     //Gets the champion data
-    this.getChampionsData = function (region, freeToPlay) {
+    var getChampionsData = function(region, freeToPlay) {
         //Create url
         var ftp = Boolean(freeToPlay) || false;
-        var url = this.generateUrl({
+        var url = generateUrl({
             region: region,
             path: '/v1.2/champion',
             static: true,
@@ -382,35 +369,35 @@ var RiotAPI = function(settings) {
             }
         });
         
-        return this.createPromise(url);
+        return createPromise(url);
     };
     
     //Gets the leagues of a summoner(all players in that league)
-    this.getLeagueBySummonerId = function (region, summonerId) {
+    var getLeagueBySummonerId = function(region, summonerId) {
         //Create url
-        var url = this.generateUrl({
+        var url = generateUrl({
             region: region,
             path: '/v2.5/league/by-summoner/' + summonerId
         });
         
-        return this.createPromise(url);
+        return createPromise(url);
     };
     
     //Gets the leagues entries of a summoner
-    this.getLeagueEntryBySummonerId = function (region, summonerId) {
+    var getLeagueEntryBySummonerId = function(region, summonerId) {
         //Create url
-        var url = this.generateUrl({
+        var url = generateUrl({
             region: region,
             path: '/v2.5/league/by-summoner/' + summonerId + '/entry'
         });
         
-        return this.createPromise(url);
+        return createPromise(url);
     };
     
     //Gets the challenger leagues in a type of game
-    this.getChallengerLeagueByGametype = function (region, type) {
+    var getChallengerLeagueByGametype = function(region, type) {
         //Create url
-        var url = this.generateUrl({
+        var url = generateUrl({
             region: region,
             path: '/v2.5/league/challenger',
             query: {
@@ -418,11 +405,11 @@ var RiotAPI = function(settings) {
             }
         });
         
-        return this.createPromise(url);
+        return createPromise(url);
     };
     
     //Gets the summary stats of a summoner
-    this.getSummaryStatsBySummonerId = function (region, summonerId, season) {
+    var getSummaryStatsBySummonerId = function(region, summonerId, season) {
 
         var query = {};
 
@@ -431,17 +418,17 @@ var RiotAPI = function(settings) {
         }
         
         //Create url
-        var url = this.generateUrl({
+        var url = generateUrl({
             region: region,
             path: '/v1.3/stats/by-summoner/' + summonerId + '/summary',
             query: query
         });
         
-        return this.createPromise(url);
+        return createPromise(url);
     };
     
     //Gets the leagues entries of a summoner
-    this.getRankedStatsBySummonerId = function (region, summonerId, season) {
+    var getRankedStatsBySummonerId = function(region, summonerId, season) {
 
         var query = {};
 
@@ -450,90 +437,88 @@ var RiotAPI = function(settings) {
         }
 
         //Create url
-        var url = this.generateUrl({
+        var url = generateUrl({
             region: region,
             path: '/v1.3/stats/by-summoner/' + summonerId + '/ranked',
             query: query
         });
         
-        return this.createPromise(url);
+        return createPromise(url);
     };
     
     //Gets the challenger leagues in a type of game
-    this.getMasteriesBySummonerId = function (region, summonerId) {
+    var getMasteriesBySummonerId = function(region, summonerId) {
         //Create url
-        var url = this.generateUrl({
+        var url = generateUrl({
             region: region,
             path: '/v1.4/summoner/' + summonerId + '/masteries'
         });
 
-        return this.createPromise(url);
+        return createPromise(url);
     };
     
     //Gets the challenger leagues in a type of game
-    this.getRunesBySummonerId = function (region, summonerId) {
+    var getRunesBySummonerId = function(region, summonerId) {
         //Create url
-        var url = this.generateUrl({
+        var url = generateUrl({
             region: region,
             path: '/v1.4/summoner/' + summonerId + '/runes'
         });
 
-        return this.createPromise(url);
+        return createPromise(url);
     };
 
     //Gets info on a summoner based on his/her name
-    this.getSummonerByName = function (region, name){
+    var getSummonerByName = function(region, name){
         //Create url
-        var url = this.generateUrl({
+        var url = generateUrl({
             region: region,
             path: '/v1.4/summoner/by-name/' + name
         });
 
-        return this.createPromise(url);
+        return createPromise(url);
     };
 
 
     //Gets info on a summoner based on his/her id
-    this.getSummonerBySummonerId = function (region, summonerId){
+    var getSummonerBySummonerId = function(region, summonerId){
         //Create url
-        var url = this.generateUrl({
+        var url = generateUrl({
             region: region,
             path: '/v1.4/summoner/' + summonerId
         });
 
-        return this.createPromise(url);
+        return createPromise(url);
     };
 
 
     //Gets info on a summoner based on his/her id
-    this.getTeamsBySummonerId = function (region, summonerId){
+    var getTeamsBySummonerId = function(region, summonerId){
         //Create url
-        var url = this.generateUrl({
+        var url = generateUrl({
             region: region,
             path: '/v2.2/team/by-summoner/' + summonerId
         });
 
-        return this.createPromise(url);
+        return createPromise(url);
     };
     
     //DDragon static data
     
     //Realms
-    this.getRealms = function (region, cb) {
-        var _this = this;
-        
+    var getRealms = function(region, cb) {
         return new Promise(function(resolve, reject) {
-            if(_this.staticData.realms) {
-                resolve(this.staticData.realms);
+            if(staticData.realms) {
+                resolve(staticData.realms);
                 return;
             }
 
             var url = 'http://ddragon.leagueoflegends.com/realms/' + region + '.json';
 
-            _this.makeRequest(url, function(err, data) {
+            makeRequest(url, function(err, data) {
                 if(err) reject(Error(err));
                 else {
-                    _this.staticData.realms = data;
+                    staticData.realms = data;
                     resolve(data);
                 }
             });
@@ -541,23 +526,21 @@ var RiotAPI = function(settings) {
     };
     
     //Runes
-    this.getRunes = function (version, locale) {
-        var _this = this;
-        
+    var getRunes = function(version, locale) {
         return new Promise(function(resolve, reject) {
             //If the data exists in the static data object
-            if(_this.staticData.runes) {
+            if(staticData.runes) {
                 //Return that data instead
-                resolve(this.staticData.runes);
+                resolve(staticData.runes);
                 return;
             }
 
 	       var url = 'http://ddragon.leagueoflegends.com/cdn/' + version + '/data/' + locale + '/rune.json';
 
-            _this.makeRequest(url, function(err, data) {
+            makeRequest(url, function(err, data) {
                 if(err) reject(Error(err));
                 else {
-                    _this.staticData.runes = data;
+                    staticData.runes = data;
                     resolve(data);
                 }
             });
@@ -565,21 +548,19 @@ var RiotAPI = function(settings) {
     };
     
     //Masteries
-    this.getMasteries = function (version, locale) {
-        var _this = this;
-        
+    var getMasteries = function(version, locale) {
         return new Promise(function(resolve, reject) {
-            if(_this.staticData.masteries) {
-                resolve(this.staticData.masteries);
+            if(staticData.masteries) {
+                resolve(staticData.masteries);
                 return;
             }
 
 	       var url = 'http://ddragon.leagueoflegends.com/cdn/' + version + '/data/' + locale + '/mastery.json';
 
-            _this.makeRequest(url, function(err, data) {
+            makeRequest(url, function(err, data) {
                 if(err) reject(Error(err));
                 else {
-                    _this.staticData.masteries = data;
+                    staticData.masteries = data;
                     resolve(data);
                 }
             });
@@ -587,23 +568,21 @@ var RiotAPI = function(settings) {
     };
     
     //Champions
-    this.getChampions = function (data, locale) {
-        var _this = this;
-        
+    var getChampions = function(data, locale) {
         return new Promise(function(resolve, reject) {
-            if(_this.staticData.champions) {
-                resolve(_this.staticData.champions);
+            if(staticData.champions) {
+                resolve(staticData.champions);
                 return;
             }
             
-            var version = _this.staticData.version;
+            var version = staticData.version;
 
             var url = 'http://ddragon.leagueoflegends.com/cdn/' + version + '/data/' + locale + '/champion.json';
 
-            _this.makeRequest(url, function(err, data) {
+            makeRequest(url, function(err, data) {
                 if(err) reject(Error(err));
                 else {
-                    _this.staticData.champions = data;
+                    staticData.champions = data;
                     resolve(data);
                 }
             });
@@ -611,21 +590,19 @@ var RiotAPI = function(settings) {
     };
     
     //Summoner spells
-    this.getSummonerSpells = function (version, locale) {
-        var _this = this;
-        
+    var getSummonerSpells = function(version, locale) {
         return new Promise(function(resolve, reject) {
-            if(_this.staticData.summonerspells) {
-                resolve(this.staticData.summonerspells);
+            if(staticData.summonerspells) {
+                resolve(staticData.summonerspells);
                 return;
             }
 
 	       var url = 'http://ddragon.leagueoflegends.com/cdn/' + version + '/data/' + locale + '/summoner.json';
 
-            _this.makeRequest(url, function(err, data) {
+            makeRequest(url, function(err, data) {
                 if(err) reject(Error(err));
                 else {
-                    _this.staticData.summonerspells = data;
+                    staticData.summonerspells = data;
                     resolve(data);
                 }
             });
@@ -633,21 +610,19 @@ var RiotAPI = function(settings) {
     };
     
     //Summoner spells
-    this.getItems = function (version, locale) {
-        var _this = this;
-        
+    var getItems = function(version, locale) {
         return new Promise(function(resolve, reject) {
-            if(_this.staticData.items) {
-                resolve(this.staticData.items);
+            if(staticData.items) {
+                resolve(staticData.items);
                 return;
             }
 
 	       var url = 'http://ddragon.leagueoflegends.com/cdn/' + version + '/data/' + locale + '/item.json';
 
-            _this.makeRequest(url, function(err, data) {
+            makeRequest(url, function(err, data) {
                 if(err) reject(Error(err));
                 else {
-                    _this.staticData.items = data;
+                    staticData.items = data;
                     resolve(data);
                 }
             });
@@ -655,21 +630,19 @@ var RiotAPI = function(settings) {
     };
     
     //Summoner spells
-    this.getLanguage = function (version, locale) {
-        var _this = this;
-        
+    var getLanguage = function(version, locale) {
         return new Promise(function(resolve, reject) {
-            if(_this.staticData.language) {
-                resolve(this.staticData.language);
+            if(staticData.language) {
+                resolve(staticData.language);
                 return;
             }
 
 	       var url = 'http://ddragon.leagueoflegends.com/cdn/' + version + '/data/' + locale + '/language.json';
 
-            _this.makeRequest(url, function(err, data) {
+            makeRequest(url, function(err, data) {
                 if(err) reject(Error(err));
                 else {
-                    _this.staticData.language = data;
+                    staticData.language = data;
                     resolve(data);
                 }
             });
@@ -677,7 +650,7 @@ var RiotAPI = function(settings) {
     };
     
     //Data
-    this.regions = {
+    var regions = {
         'euw': 'Europe West',
         'eune': 'Europe Nordic and East',
         'na': 'North America',
@@ -691,7 +664,7 @@ var RiotAPI = function(settings) {
         'pbe': 'Public Beta Environment'
     };
 
-    this.readableQueues = {
+    var readableQueues = {
         2: 'Normal 5v5 Blind Pick',
         4: 'Ranked Solo 5v5',
         7: 'Coop vs AI 5v5',
@@ -709,7 +682,7 @@ var RiotAPI = function(settings) {
         73:	'Snowdown Showdown 2v2'
     };
 
-    this.queues = {
+    var queues = {
         2: 'Normal 5v5 Blind Pick',
         4: 'RANKED_SOLO_5X5',
         7: 'Coop vs AI 5v5',
@@ -727,7 +700,7 @@ var RiotAPI = function(settings) {
         73:	'Snowdown Showdown 2v2'
     };
 
-    this.gametypes = {
+    var gametypes = {
         'CUSTOM_GAME': 'Custom game',
         'MATCHED_GAME':	'Matched game',
         'CO_OP_VS_AI_GAME': 'Bot game',
@@ -737,21 +710,21 @@ var RiotAPI = function(settings) {
         'RANKED_TEAM_3x3': 'Ranked Team 3v3'
     };
 
-    this.gamemode = {
+    var gamemode = {
         'CLASSIC': 'Summoner\'s Rift/Twisted Treeline game',
         'ODIN': 'Dominion/Crystal Scar game',
         'ARAM':	'ARAM/Howling Abyss game',
         'TUTORIAL':	'Tutorial game'
     };
     
-    this.readableMaps = {
+    var readableMaps = {
         '1':  "Original Summoner's Rift",
         '10': "Current Twisted Treeline",
         '11': "Summoner's Rift",
         '12': "Howling Abyss"
     };
 
-    this.platforms = {
+    var platforms = {
         br: 'BR1',
         eune: 'EUN1',
         euw: 'EUW1',
@@ -766,16 +739,50 @@ var RiotAPI = function(settings) {
     };
     
     //Initialize
-    (function init(api) {
-        console.log("initializing");
-        //Get the version upon creation
-        api.getCurrentVersion('euw').catch(function(error) {
-            console.log("Failed to load current version: %s", error);
-        });
-    })(this);
+    console.log("initializing");
+    //Get the version upon creation
+    getCurrentVersion('euw').catch(function(error) {
+        console.log("Failed to load current version: %s", error);
+    });
     
-    //Return this object
-    return this;
-}
+    return {
+        //Static-data cache
+        staticData: staticData,
+        
+        //Readable data
+        platforms: platforms,
+        readableMaps: readableMaps,
+        gamemode: gamemode,
+        gametypes: gametypes,
+        queues: queues,
+        regions: regions,
+        readableQueues: readableQueues,
+        
+        //Static data(ddragon api)
+        getCurrentVersion: getCurrentVersion,
+        getLanguage: getLanguage,
+        getItems: getItems,
+        getSummonerSpells: getSummonerSpells,
+        getMasteries: getMasteries,
+        getRunes: getRunes,
+        getChampions: getChampions,
+        
+        //Endpoints
+        getTeamsBySummonerId: getTeamsBySummonerId,
+        getSummonerBySummonerId: getSummonerBySummonerId,
+        getSummonerByName: getSummonerByName,
+        getRunesBySummonerId: getRunesBySummonerId,
+        getMasteriesBySummonerId: getMasteriesBySummonerId,
+        getRankedStatsBySummonerId: getRankedStatsBySummonerId,
+        getSummaryStatsBySummonerId: getSummaryStatsBySummonerId,
+        getChallengerLeagueByGametype: getChallengerLeagueByGametype,
+        getLeagueEntryBySummonerId: getLeagueEntryBySummonerId,
+        getRecentGamesBySummonerId: getRecentGamesBySummonerId,
+        getFeaturedGames: getFeaturedGames,
+        getCurrentGame: getCurrentGame,
+        getChampionsData: getChampionsData,
+        getMatchList: getMatchList
+    };
+}());
 
 module.exports = RiotAPI;

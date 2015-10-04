@@ -1,8 +1,9 @@
 var MatchHistoryElement = require('../Model/MatchHistoryElement.js'),
-    Database = require('../db.js'),
+    Database = require('../Database/Database.js'),
     Promise = require('bluebird'),
     _ = require('underscore'),
-    config = require('../Config/config.js');
+    config = require('../Config/config.js'),
+    RiotAPI = require('../API/RiotAPI.js');
 
 /**
  * This class has the responsibility to fetch and update the data that are
@@ -11,10 +12,7 @@ var MatchHistoryElement = require('../Model/MatchHistoryElement.js'),
  * @param {RiotAPI}  An instance handling the requests to the Riot Games API
  * @param {Database} An instance handling the connection to the MySQL database
  */
-var DataHandler = function(api, analysisController) {
-    
-    var db = Database.getInstance(),
-        api = api;
+var DataHandler = (function() {
     
     /**
      * Updates the rankings data of each of the summoners in the game.
@@ -26,11 +24,11 @@ var DataHandler = function(api, analysisController) {
             //All the playes league data can be made in one api call, so we update for everyone
 
             //Get new data from the api
-            api.getLeagueEntryBySummonerId(region, summonerIds).then(function(data) {
-                return db.updateLeagueData(data);
+            RiotAPI.getLeagueEntryBySummonerId(region, summonerIds).then(function(data) {
+                return Database.updateLeagueData(data);
 
-            }).then(function(newDbData) {
-                resolve(newDbData);
+            }).then(function(rows) {
+                resolve(rows);
 
             }).catch(function(error) {
                 reject(error);
@@ -54,7 +52,7 @@ var DataHandler = function(api, analysisController) {
             
             //Start the update
             summoners.forEach(function(summonerId) {
-                promises.push(api.getRankedStatsBySummonerId(region, summonerId));
+                promises.push(RiotAPI.getRankedStatsBySummonerId(region, summonerId));
             });
 
             //Wait for the promises to finish
@@ -65,7 +63,7 @@ var DataHandler = function(api, analysisController) {
                     //Check if the promise was resolved
                     if(promise.isResolved()) {
                         //Update the data if there are data present
-                        db.updateChampData(promise.value());
+                        Database.updateChampData(promise.value());
                         amountUpdated += 1;
                     }
                 });
@@ -93,7 +91,7 @@ var DataHandler = function(api, analysisController) {
      */
     function updateSummonerGames(region, summonerId, championIds, rankedQueues, seasons, beginTime, endTime, beginIndex, endIndex) {
         return new Promise(function(resolve, reject) {
-            api.getMatchList(gameObject.region, summonerId, null, null, config.currentSeason, null, null, null, null).then(function(data) {console.log(data);
+            RiotAPI.getMatchList(gameObject.region, summonerId, null, null, config.currentSeason, null, null, null, null).then(function(data) {console.log(data);
                 //Analyse the data
                 return analysisController.initializeMatchListAnalysis(summonerId, data);
                 
@@ -102,7 +100,7 @@ var DataHandler = function(api, analysisController) {
                     //Player has no games in the given queue ever or since the start of 2013
                     
                     //Log the update time
-                    db.logGameUpdate(summonerId);
+                    Database.logGameUpdate(summonerId);
                     
                     //Reject with 404 as the reason
                     reject(404);
@@ -167,7 +165,7 @@ var DataHandler = function(api, analysisController) {
     
     return {
         //The current version og League of Legends
-        version: api.staticData.version,
+        version: RiotAPI.staticData.version,
         
         /**
          * Fetches the league information from the db and updates it if necessary
@@ -178,11 +176,14 @@ var DataHandler = function(api, analysisController) {
             return new Promise(function(resolve, reject) {
                 //Get existing data from database
                 //We are only interested in the summoners solo rating
-                db.getSummonerLeagueData(summoners, 'RANKED_SOLO_5X5').then(function(dbData) {
+                Database.getSummonerLeagueData(summoners, 'RANKED_SOLO_5X5').then(function(dbData) {
                     var requiresUpdate = findUpdateNeeds(summoners, dbData, "league");
                     
                     //Update the data if necessary and fetch the new data, or return the original data if not
-                    return (requiresUpdate.length == 0 ) ? dbData : updateLeagueData(requiresUpdate, summoners[0].region, dbData).then(db.getSummonerLeagueData(summoners, 'RANKED_SOLO_5X5'));
+                    return (requiresUpdate.length == 0 ) ? dbData : updateLeagueData(requiresUpdate, summoners[0].region, dbData)
+                        .then(function(data) {
+                            return Database.getSummonerLeagueData(summoners, 'RANKED_SOLO_5X5')
+                        });
         
                 }).then(function(updated) {
                     //"updated" is now either the original data or updated data if it was updated
@@ -203,7 +204,7 @@ var DataHandler = function(api, analysisController) {
             return new Promise(function(resolve, reject) {
                 //Get information on the champions of summoners from the database
                 var dbData;
-                db.getSummonerChampData(summoners).then(function(data) {
+                Database.getSummonerChampData(summoners).then(function(data) {
                     dbData = data;
                     
                     //Find which summoners need an update
@@ -224,7 +225,7 @@ var DataHandler = function(api, analysisController) {
                     }
                     else {
                         //There was some data updated, retrieve data again
-                        return db.getSummonerChampData(summoners);
+                        return Database.getSummonerChampData(summoners);
                     }
                     
                 }).then(function(data) {
@@ -254,7 +255,7 @@ var DataHandler = function(api, analysisController) {
                         new Promise(function(resolve, reject) {
 
                             //API call
-                            api.getRecentGamesBySummonerId(summoner.region, summoner.summonerId).then(function(data) {
+                            RiotAPI.getRecentGamesBySummonerId(summoner.region, summoner.summonerId).then(function(data) {
                                 //Handle data
 
                                 //Create a new object for the data
@@ -305,7 +306,7 @@ var DataHandler = function(api, analysisController) {
                     var response = {
                         data: data,
                         //Add version data to the response
-                        version: api.staticData.version
+                        version: RiotAPI.staticData.version
                     };
 
                     resolve(response);
@@ -324,7 +325,7 @@ var DataHandler = function(api, analysisController) {
                 var promises = [];
 
                 //Find the last time the statistics were updated
-                db.getUpdateTimestamps(_.pluck(summoners, 'summonerId')).then(function(lastUpdates) {
+                Database.getUpdateTimestamps(_.pluck(summoners, 'summonerId')).then(function(lastUpdates) {
 
                     //Create the list of promises, one for each player
                     summoners.forEach(function(summoner) {
@@ -332,7 +333,7 @@ var DataHandler = function(api, analysisController) {
                             new Promise(function(resolve, reject) {
 
                                 //Get any existing data from the database
-                                db.getRoles(summoner.summonerId).then(function(dbData) {
+                                Database.getRoles(summoner.summonerId).then(function(dbData) {
 
                                     //Fetch new data if none exists
                                     if(dbData.length == 0) {
@@ -410,7 +411,7 @@ var DataHandler = function(api, analysisController) {
             return new Promise(function(resolve, reject) {
 
                 //Get information on the champions of summoners from the database
-                db.getSummonerMostPlayed(summoners, amount).then(function(dbData) {
+                Database.getSummonerMostPlayed(summoners, amount).then(function(dbData) {
                     //Resolve with data
                     resolve(dbData);
 
@@ -427,8 +428,8 @@ var DataHandler = function(api, analysisController) {
          */
         updateChampionsData: function() {
             //Update champion base in db
-            api.getChampionsData('euw').then(function(data) {
-                return Database.getInstance().updateChampionTable(data['data']);
+            RiotAPI.getChampionsData('euw').then(function(data) {
+                return Database.updateChampionTable(data['data']);
             }).then(function(rows) {
                 console.log("Static champion data updated successfully");
             }).catch(function(error) {
@@ -446,7 +447,7 @@ var DataHandler = function(api, analysisController) {
             return new Promise(function(resolve, reject) {
                 if(typeof champData !== 'undefined') resolve(champData);
                 else {
-                    api.getChampions('image', 'en_GB').then(function(data) {
+                    RiotAPI.getChampions('image', 'en_GB').then(function(data) {
                         resolve(data);
                     }).catch(function(error) {
                         console.log("error getting the champion data: " + error);
@@ -456,6 +457,6 @@ var DataHandler = function(api, analysisController) {
             });
         }
     }
-}
+}());
 
 module.exports = DataHandler;

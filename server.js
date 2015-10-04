@@ -5,12 +5,11 @@ var httpserver = require('http').Server(app);
 var io = require('socket.io')(httpserver);
 var ServerController = require('./Controllers/ServerController.js');
 
-var server = function() {
+var server = (function() {
 
     var instance = this,
         server_port = process.env.OPENSHIFT_NODEJS_PORT || 8080,
-        server_ip   = process.env.OPENSHIFT_NODEJS_IP   || '127.0.0.1',
-        serverController = new ServerController(this);
+        server_ip   = process.env.OPENSHIFT_NODEJS_IP   || '127.0.0.1';
     io.set('origins', '*:*');
     
     //Start listening
@@ -19,20 +18,20 @@ var server = function() {
     });
     
     io.sockets.on('connection', function (socket) {
-        console.log( "- Connection established: " + socket.request );
+        console.log( "- Connection established: " + socket );
         addListeners(socket);
     });
     
     //Adds listeners
-    function addListeners(socket) {
+    var addListeners = function(socket) {
         socket.on('get:currentgame', function(data) {
-            console.log( "- Request received for current game data: " + socket.request );
+            console.log( "- Request received for current game data: " + socket );
             
             //Normalize name
             var name = data.name.toLowerCase().replace(" ", ""),
                 region = data.region || 'euw'
             
-            serverController.requestGameInformation(socket, name, region);
+            ServerController.requestGameInformation(socket, name, region);
         });
                 
         //Log disconnects
@@ -40,17 +39,6 @@ var server = function() {
             console.log('Got disconnect!');
         });
     }
-    
-    //Public functions
-    this.emitData = function(socket, type, data) {
-        console.log("sending data: " + type);
+}());
 
-        var result = {};
-        result[type] = data;
-        socket.emit('message', result);
-    }
-    
-    return this;
-}
-
-var s = new server();
+module.exports = server;

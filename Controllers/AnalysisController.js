@@ -1,9 +1,9 @@
 var Promise = require('bluebird');
-var config  = require('../Config/config.js');
-var Database= require('../db.js');
+    config  = require('../Config/config.js');
+    Database= require('../Database/Database.js'),
+    RiotAPI = require('../API/RiotAPI.js');
 
-var analysisController = function(api) {
-    var db = Database.getInstance();
+var analysisController = (function() {
     
     function random() {
         
@@ -16,13 +16,13 @@ var analysisController = function(api) {
         initializeMatchListAnalysis: function(summonerId, data) {
             return new Promise(function(resolve, reject) {
                 //Insert data into the database
-                db.insertMatches(summonerId, data).then(function(rows) {
+                Database.insertMatches(summonerId, data).then(function(rows) {
                     return db.getRoles(summonerId);
                 }).then(function(newData) {
                     resolve(newData);
                     
                     //Log the time of the update
-                    db.logGameUpdate(summonerId);
+                    Database.logGameUpdate(summonerId);
                     
                     //Insert data into analysis queue
                     //....
@@ -32,6 +32,6 @@ var analysisController = function(api) {
             });
         }
     }
-}
+}());
 
 module.exports = analysisController;
