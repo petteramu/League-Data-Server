@@ -40,7 +40,7 @@ var Database = (function()
                 }
                 //Add queuetype
                 query += ") AND queueType = '" + queueType + "'";
-                console.info(query);
+                
                 //Perform query
                 connection.query(query).then(function(rows) {
                     resolve(rows);
@@ -65,7 +65,7 @@ var Database = (function()
                         query += " OR ";
                     query += "(s.summonerId = " + summoners[i].summonerId + " AND s.championId = " + summoners[i].championId + ")";
                 }
-
+                
                 //Perform query
                 connection.query(query).then(function(rows) {
                     resolve(rows);
@@ -240,6 +240,7 @@ var Database = (function()
         getRoles: function(summonerId) {
             return new Promise(function(resolve, reject) {
                 var sql = "SELECT COUNT(summonerId) as games, summonerId, role, lane FROM `participant` WHERE summonerId = " + summonerId + " GROUP BY role, lane, summonerId";
+                
                 //Perform query
                 connection.query(sql).then(function(rows) {
                     resolve(rows);

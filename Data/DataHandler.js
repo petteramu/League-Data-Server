@@ -3,7 +3,8 @@ var MatchHistoryElement = require('../Model/MatchHistoryElement.js'),
     Promise = require('bluebird'),
     _ = require('underscore'),
     config = require('../Config/config.js'),
-    RiotAPI = require('../API/RiotAPI.js');
+    RiotAPI = require('../API/RiotAPI.js'),
+    AnalysisController = require('../Controllers/AnalysisController.js');
 
 /**
  * This class has the responsibility to fetch and update the data that are
@@ -61,7 +62,7 @@ var DataHandler = (function() {
 
                 settledPromises.forEach(function(promise) {
                     //Check if the promise was resolved
-                    if(promise.isResolved()) {
+                    if(promise.isFulfilled()) {
                         //Update the data if there are data present
                         Database.updateChampData(promise.value());
                         amountUpdated += 1;
@@ -91,13 +92,15 @@ var DataHandler = (function() {
      */
     function updateSummonerGames(region, summonerId, championIds, rankedQueues, seasons, beginTime, endTime, beginIndex, endIndex) {
         return new Promise(function(resolve, reject) {
-            RiotAPI.getMatchList(gameObject.region, summonerId, null, null, config.currentSeason, null, null, null, null).then(function(data) {console.log(data);
+            RiotAPI.getMatchList(region, summonerId, null, null, config.currentSeason, null, null, null, null).then(function(data) {
                 //Analyse the data
-                return analysisController.initializeMatchListAnalysis(summonerId, data);
+                return AnalysisController.initializeMatchListAnalysis(summonerId, data);
                 
             }, function(error) {
-                if(error === 404 || error === 422) {
-                    //Player has no games in the given queue ever or since the start of 2013
+                //Handles errors with the match list endpoint
+                
+                //Player has no games in the given queue ever or since the start of 2013
+                if(error === 404 || error === 422) {console.log(error);
                     
                     //Log the update time
                     Database.logGameUpdate(summonerId);
@@ -382,7 +385,7 @@ var DataHandler = (function() {
                     //Wait for all the calls to finish
                     Promise.settle(promises).then(function(data) {
                         var responseData = [];
-
+                        
                         data.forEach(function(promise) {
                             if(promise.isFulfilled()) {
                                 responseData.push(promise.value());

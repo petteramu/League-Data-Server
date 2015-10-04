@@ -45,7 +45,7 @@ var GameController = function(coreData, region) {
                 //Set the stage to sent
                 subscriber.setStage(stage, true);
                 
-                subscriber.socket.emit("message", wrap);
+                subscriber.socket.emit('message', wrap);
             }
         });
     }
@@ -55,14 +55,17 @@ var GameController = function(coreData, region) {
      * @param {Subscriber} subscriber
      */
     function afterSendData(subscriber) {
+        
         for(var property in cache) {
             //Iterate each stage
             if (cache.hasOwnProperty(property)
                && !subscriber.stages[property]
                && cache[property]) {
+                //Wrap data
+                var wrap = {};
+                wrap[property] = cache[property];
                 //Send data since it has not been sent yet
-                console.log(1);
-                subscriber.socket.emit(property, cache[property]);
+                subscriber.socket.emit('message', wrap);
             }
         }
     }
@@ -132,7 +135,7 @@ var GameController = function(coreData, region) {
             //We continue because it is not crucial data, and the rest should still be sent.
             if(data !== false) {
                 //Store data
-                cache.mostplayed = DataFormatter.formatMostPlayedChampions(data, getSummonerList());
+                cache.mostplayed = DataFormatter.formatMostPlayedChampions(data, getSummonerList(), champData);
                 emitData("mostplayed", cache.mostplayed);
             }
 
@@ -146,7 +149,7 @@ var GameController = function(coreData, region) {
             //We continue because it is not crucial data, and the rest should still be sent.
             if(data !== false) {
                 //Store data
-                cache.roles = DataFormatter.formatRoleData(data);
+                cache.roles = DataFormatter.formatRoleData(data, getSummonerList());
                 emitData("roles", cache.roles);
             }
 
@@ -173,12 +176,12 @@ var GameController = function(coreData, region) {
         //Handle error
         if(typeof errorMessage === 'undefined') {
             //An error message was not defined earlier, therefore we attempt to fetch the rest of the data as this data is not crucial
-            errorMessage = "Could not fetch " + location + " data";
+            error = "Could not fetch " + location + " data";
 
             //Continue sending other data
             emitData("error", {
                 location: location,
-                error: errorMessage
+                error: error
             });
 
             //Resolve with false to not send data

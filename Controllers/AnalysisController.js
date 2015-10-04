@@ -1,5 +1,6 @@
-var Promise = require('bluebird');
-    config  = require('../Config/config.js');
+"use strict";
+var Promise = require('bluebird'),
+    config  = require('../Config/config.js'),
     Database= require('../Database/Database.js'),
     RiotAPI = require('../API/RiotAPI.js');
 
@@ -10,14 +11,16 @@ var analysisController = (function() {
     }
     
     return {
-        //Starts the first step in match list data analysis
-        //This step only produces data that is to be returned to the client
-        //Then queues the rest of the analysis
+        /**
+         * Starts the first step in match list data analysis
+         * This step only produces data that is to be returned to the client
+         * then queues the rest of the analysis
+         */
         initializeMatchListAnalysis: function(summonerId, data) {
             return new Promise(function(resolve, reject) {
                 //Insert data into the database
                 Database.insertMatches(summonerId, data).then(function(rows) {
-                    return db.getRoles(summonerId);
+                    return Database.getRoles(summonerId);
                 }).then(function(newData) {
                     resolve(newData);
                     

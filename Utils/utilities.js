@@ -1,4 +1,4 @@
-var Utilities = function() {
+var Utilities = (function() {
     
     return {
         getRealRole: function(role, lane) {
@@ -21,6 +21,6 @@ var Utilities = function() {
             return (lower ? string.toLowerCase() : string).replace(/(?:^|\s)\S/g, function(a) { return a.toUpperCase(); });
         }
     }
-}
+}());
 
 module.exports = Utilities;

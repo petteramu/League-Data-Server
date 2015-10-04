@@ -1,7 +1,10 @@
+"use strict";
+
 var Promise = require('bluebird'),
     _ = require('underscore'),
     Readables = require('../Utils/Readables.js'),
-    Summoner = require('../Model/Summoner.js');
+    Summoner = require('../Model/Summoner.js'),
+    Utilities = require('../Utils/utilities.js');
 
 var DataFormatter = (function() {
     return {
@@ -29,8 +32,7 @@ var DataFormatter = (function() {
                     //The length of the team in the formatted response is used to create the participant numbers
                     var pNo = (element.teamId == 100) ? element.teamId + formattedResponse.blueTeam.length + 1 : element.teamId + formattedResponse.redTeam.length + 1;
 
-                    var summonerObject = new Summoner(element.summonerId, pNo, element.championId, element.teamId, region);
-                    summonerObject.championId = element.championId;
+                    var summonerObject = new Summoner(element.summonerId, element.summonerName, pNo, element.championId, element.teamId, region);
 
                     //Insert into the correct list
                     if(element.teamId == 100) {
@@ -93,7 +95,7 @@ var DataFormatter = (function() {
          * @return {Object} Formatted data
          */
         formatChampData: function(rawData, summoners) {
-            var formatted = []
+            var formatted = [];
             rawData.forEach(function(dbElement) {
                 summoners.forEach(function(summoner) {
                     if(dbElement.summonerId == summoner.summonerId) {
@@ -101,6 +103,7 @@ var DataFormatter = (function() {
                         formatted.push({
                             participantNo: summoner.participantNo,
                             championWins: dbElement.wins,
+                            championName: dbElement.name,
                             championLosses: dbElement.losses,
                             championKills: dbElement.kills,
                             championDeaths: dbElement.deaths,
@@ -138,7 +141,7 @@ var DataFormatter = (function() {
 
                 //Find the total amount of games
                 var totalGames = 0;
-                data.forEach(function(element) {
+                rawData.forEach(function(element) {
                   totalGames += element.games;
                 });
 
@@ -149,7 +152,7 @@ var DataFormatter = (function() {
                     var percentage = (element.games * 100) / totalGames;
 
                     //Find a more suitable type of roles, each different realRole can be created from several unique combinations of lane + role
-                    var realRole = utilities.getRealRole(element.role, element.lane);
+                    var realRole = Utilities.getRealRole(element.role, element.lane);
                     
                     //Find entry of realRole
                     var existing = _.find(object.roles, function(role) { return role.role === realRole; });
@@ -166,7 +169,7 @@ var DataFormatter = (function() {
                 });
                 
                 //Sort the roles in descending order
-                object.roles = _.sortBy(object.roles, function(role) { return role.games });
+                object.roles = _.sortBy(object.roles, function(role) { return role.games }).reverse();
             });
             return response;
         },
@@ -177,13 +180,23 @@ var DataFormatter = (function() {
          * @param {List<Summoner>} summoners The summoners present in the data
          * @return {Object} The formatted data
          */
-        formatMostPlayedChampions: function(rawData, summoners) {
+        formatMostPlayedChampions: function(rawData, summoners, championData) {
             var response = {};
             
             //Iterate summoners
             summoners.forEach(function(summoner) {
                 //Find rows that belong to this summoner
                 var rows = _.filter(rawData, function(row) { return row.summonerId == summoner.summonerId; });
+                
+                //Insert champion image data
+                for(var index in rows) {
+                    for (var property in championData['data']) {
+                        if (championData['data'].hasOwnProperty(property) && championData['data'][property].key == rows[index].championId) {
+                            rows[index].championImage = championData['data'][property].image;
+                        }
+                    }
+                }
+                
                 response[summoner.participantNo] = rows;
             });
             
