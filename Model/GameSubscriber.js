@@ -8,7 +8,6 @@ var GameSubscriber = function(socket) {
         mostplayed: false,
         roles: false
     }
-    this.listeningTo;
     
     /**
      * Resets the stages of a socket

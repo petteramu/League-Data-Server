@@ -22,7 +22,9 @@ var DataFormatter = (function() {
                     version: version,
                     queue: Readables.readableQueues[coreData.gameQueueConfigId],
                     map: Readables.readableMaps[coreData.mapId],
-                    region: region
+                    region: region,
+                    gameStartTime: coreData.gameStartTime,
+                    gameLength: coreData.gameLength
                 };
 
                 //Create the formatted participant objects
@@ -30,12 +32,12 @@ var DataFormatter = (function() {
                     //The first 5 in the list from the API is on blue(100) team, the next are on the purple(200)
                     //The participant number goes from 101-105 and 201 to 205
                     //The length of the team in the formatted response is used to create the participant numbers
-                    var pNo = (element.teamId == 100) ? element.teamId + formattedResponse.blueTeam.length + 1 : element.teamId + formattedResponse.redTeam.length + 1;
+                    var pNo = (element.teamId === 100) ? element.teamId + formattedResponse.blueTeam.length + 1 : element.teamId + formattedResponse.redTeam.length + 1;
 
                     var summonerObject = new Summoner(element.summonerId, element.summonerName, pNo, element.championId, element.teamId, region);
 
                     //Insert into the correct list
-                    if(element.teamId == 100) {
+                    if(element.teamId === 100) {
                         formattedResponse.blueTeam.push(summonerObject);
                     }
                     else {

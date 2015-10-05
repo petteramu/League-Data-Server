@@ -1,3 +1,5 @@
+"use strict";
+
 var config = require('../Config/config.js'),
     Util = require('../Utils/utilities.js'),
     RiotAPI = require('../API/RiotAPI.js'),
@@ -28,6 +30,10 @@ var ServerController = (function() {
 
     DataHandler.updateChampionsData();
     
+    /**
+     * Returns the game controller for the given gameId if it exists
+     * @param {Long} gameId
+     */
     var findGameController = function(gameId) {
         //Find controller
         if(gameControllers.hasOwnProperty(gameId)) {
@@ -39,7 +45,18 @@ var ServerController = (function() {
     }
     
     /**
+     * Removes and deletes any references to the given GameController
+     */
+    var removeGameController = function(gc) {
+        console.log(delete gameControllers[gc.gameId]);
+//        console.log(delete gc);
+    }
+    
+    /**
      * Adds a socket to the GameController representing the game that the socket requested
+     * @param {Socket} socket
+     * @param {String} searchedName
+     * @param {String} region
      */
     var requestGameInformation = function(socket, searchedName, region) {
         //Remove previous subscription
@@ -58,7 +75,7 @@ var ServerController = (function() {
                 type: "Summoner name",
                 error: "No summoner by that name"
             }
-            return errorObject;
+            return Promise.reject(errorObject);
 
         }).then(function(summonerData) {
             //Find the game and id
@@ -73,22 +90,33 @@ var ServerController = (function() {
                     type: "No game",
                     error: "Summoner is not currently in a game"
                 }
-                return errorObject;
+                return Promise.reject(errorObject);
             }
-            return errorObject;
+            return Promise.reject(errorObject);
 
+        //Handle the subscriptions to the game
         }).then(function(gameData) {
+            //Remove previously subscribed game
+            if(socketGamePairs[socket]) {
+                socketGamePairs[socket].removeSubscriber(socket);
+            }
+            
             //Find or create the game object
             var gc = findGameController(gameData['gameId']);
 
-            //Create if it does not exist
+            //Create new GameController if it does not exist
             if(!gc) {
-                gc = new GameController(gameData, region);
-                gameControllers[gameData['gameId']] = gc;
+                gameControllers[gameData['gameId']] = new GameController(gameData, region);
+                
+                //Set the time for deletion
+                setTimeout(function() { removeGameController(gameControllers[gameData['gameId']]); }, 3600000); //1 hour
             }
 
             //Add the socket as a listener
             gc.addSubscriber(socket);
+            
+            //Store the connection between the socket and the GameController
+            socketGamePairs[socket] = gc;
 
         }).catch(function(error) {
             console.log(error.stack);

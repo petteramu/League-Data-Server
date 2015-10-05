@@ -17,7 +17,8 @@ var DataFormatter = require('../Data/DataFormatter.js'),
 var GameController = function(coreData, region) {
     var gameId = gameId,
         region = region,
-        champData;
+        champData,
+        gameStartTime;
     
     //Cache object
     //Having the data being cached in each of the GameController objects means it is automatically dispensed when this object is removed
@@ -212,8 +213,13 @@ var GameController = function(coreData, region) {
             return DataFormatter.formatCoreData(coreData, championData, region, RiotAPI.staticData.version);
             
         }).then(function(formatted) {
-            //Save the data
+            //Save the data to the cache
             cache.core = formatted;
+            
+            //Start game duration updates
+            gameStartTime = formatted.gameStartTime;
+            startGameEndCheck();
+            
             //Send the core data
             emitData("core", formatted);
             //Start receiving the rest of the data
@@ -226,9 +232,9 @@ var GameController = function(coreData, region) {
     })();
     
     //Public functions
-    return {
+    return {        
         /**
-         * Adds a subscriber
+         * Adds a subscriber to new new Data
          * @param {Socket} socket The socket to add
          */
         addSubscriber: function(socket) {
@@ -252,7 +258,12 @@ var GameController = function(coreData, region) {
                     subscribers.splice(index, 1);
                 }
             });
-        }
+        },
+        
+        /**
+         * Returns the games duration
+         */
+        gameDuration: function() { return new Date() - new Date(gameStartTime) }
     };
 };
 
