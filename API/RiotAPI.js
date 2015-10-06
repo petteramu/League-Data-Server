@@ -30,6 +30,10 @@ var RiotAPI = (function() {
     //The queue that holds the requests
     var queue = [];
     
+    //Queue that holds promises that are needed by the AnalysisController
+    //Is only executed when the original queue is empty
+    var analysisQueue = [];
+    
     //Whether or not the queue is being executed
     var executing = false;
     
@@ -38,7 +42,7 @@ var RiotAPI = (function() {
     
     //The time that is forced between two calls
     //Mainly used to account for the time taken between adding a stamp and the actual call being made in the riot db
-    var forcedTimeBetweenCalls = 50;
+    var forcedTimeBetweenCalls = 75;
     
     //A reference to whether or not the API is waiting for a request to finish
     var waiting = false;

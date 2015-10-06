@@ -218,7 +218,6 @@ var GameController = function(coreData, region) {
             
             //Start game duration updates
             gameStartTime = formatted.gameStartTime;
-            startGameEndCheck();
             
             //Send the core data
             emitData("core", formatted);

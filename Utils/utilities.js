@@ -19,6 +19,10 @@ var Utilities = (function() {
         
         capitalize: function(string, lower) {
             return (lower ? string.toLowerCase() : string).replace(/(?:^|\s)\S/g, function(a) { return a.toUpperCase(); });
+        },
+        
+        normalizeName: function(string) {
+            return string.toLowerCase().replace(" ", "");
         }
     }
 }());

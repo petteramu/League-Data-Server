@@ -137,15 +137,15 @@ var DataFormatter = (function() {
                     participantNo: participant.participantNo,
                     roles: []
                 };
+
+                //Find the total amount of games for this summoner
+                var totalGames = 0;
+                roleData.forEach(function(element) {
+                  totalGames += element.games;
+                });
                 
                 //Insert into response
                 response.push(object);
-
-                //Find the total amount of games
-                var totalGames = 0;
-                rawData.forEach(function(element) {
-                  totalGames += element.games;
-                });
 
                 //Create responses
                 roleData.forEach(function(element) {

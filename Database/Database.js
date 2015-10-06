@@ -245,7 +245,6 @@ var Database = (function()
                 connection.query(sql).then(function(rows) {
                     resolve(rows);
                 }).catch(function(error) {
-                    console.log(sql);
                     reject(error);
                 });
             });

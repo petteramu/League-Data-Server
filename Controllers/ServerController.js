@@ -24,10 +24,6 @@ var ServerController = (function() {
     //Socket GameController pairs
     socketGamePairs = {};
 
-    //Keep alive on the server
-    //Should be unnecessary when the analysis controller is done
-    setInterval(function() { console.log("Keep alive"); }, 600000);
-
     DataHandler.updateChampionsData();
     
     /**
@@ -49,7 +45,44 @@ var ServerController = (function() {
      */
     var removeGameController = function(gc) {
         console.log(delete gameControllers[gc.gameId]);
-//        console.log(delete gc);
+    }
+    
+    /**
+     * Subscribes the socket to the first available game that is already being watched
+     * If no game is eligeble, get a random game from the featured game endpoint
+     * @param {Socket} socekt
+     * @param {String} region
+     */
+    var handRandomGame = function(socket, region) {
+        //Remove previously subscribed game
+        if(socketGamePairs[socket]) {
+            socketGamePairs[socket].removeSubscriber(socket);
+        }
+        
+        //Find the first GameController listed
+        for(var gameId in gameControllers) {
+            if(gameControllers.hasOwnProperty(gameId) && typeof gameControllers[gameId] !== 'undefined') {
+                //Add as subscriber to game
+                gameControllers[gameId].addSubscriber(socket);
+
+                //Store the connection between the socket and the GameController
+                socketGamePairs[socket] = gameControllers[gameId];
+                
+                //End as we found a game that can be used
+                return;
+            }
+        }
+        
+        //If we did not find a suitable game in the game list, find one from the featured games
+        RiotAPI.getFeaturedGames(region).then(function(featuredGames) {
+            //Randomize
+            var num = featuredGames['gameList'].length;
+            var rand = Math.floor(Math.random() * num);
+            
+            //The featured game endpoint does not contain all the data we need, so we fetch new data from the current game endpoint
+            var summonerName = Util.normalizeName(featuredGames['gameList'][rand]['participants'][0]['summonerName']);
+            requestGameInformation(socket, summonerName, region);
+        });
     }
     
     /**
@@ -113,7 +146,7 @@ var ServerController = (function() {
             }
 
             //Add the socket as a listener
-            gc.addSubscriber(socket);
+            gameControllers[gameData['gameId']].addSubscriber(socket);
             
             //Store the connection between the socket and the GameController
             socketGamePairs[socket] = gc;
@@ -126,7 +159,8 @@ var ServerController = (function() {
     }
     
     return {
-        requestGameInformation: requestGameInformation
+        requestGameInformation: requestGameInformation,
+        requestRandomGame: handRandomGame
     }
 }());
 

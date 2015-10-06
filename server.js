@@ -33,6 +33,15 @@ var server = (function() {
             
             ServerController.requestGameInformation(socket, name, region);
         });
+        
+        
+        socket.on('get:randomgame', function(data) {
+            console.log( "- Request received for random game data: " + socket );
+            
+            //Normalize name
+            var region = data.region || 'euw';
+            ServerController.requestRandomGame(socket, region);
+        });
                 
         //Log disconnects
         socket.on('disconnect', function() {

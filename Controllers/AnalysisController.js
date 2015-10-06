@@ -5,11 +5,6 @@ var Promise = require('bluebird'),
     RiotAPI = require('../API/RiotAPI.js');
 
 var analysisController = (function() {
-    
-    function random() {
-        
-    }
-    
     return {
         /**
          * Starts the first step in match list data analysis
@@ -27,8 +22,11 @@ var analysisController = (function() {
                     //Log the time of the update
                     Database.logGameUpdate(summonerId);
                     
+                    //Filter games based on patch
+//                    getGameIdsFromCurrentPatch(data);
+                    
                     //Insert data into analysis queue
-                    //....
+                    
                 }).catch(function(error) {
                     reject(error);
                 });
