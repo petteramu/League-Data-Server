@@ -448,15 +448,40 @@ var DataHandler = (function() {
          */
         getStaticChampionData: function() {
             return new Promise(function(resolve, reject) {
-                if(typeof champData !== 'undefined') resolve(champData);
-                else {
-                    RiotAPI.getChampions('image', 'en_GB').then(function(data) {
-                        resolve(data);
-                    }).catch(function(error) {
-                        console.log("error getting the champion data: " + error);
-                        reject(error);
-                    });
-                }
+                RiotAPI.getChampions('image', 'en_GB').then(function(data) {
+                    resolve(data);
+                }).catch(function(error) {
+                    console.log("error getting the champion data: " + error);
+                    reject(error);
+                });
+            });
+        },
+    
+        /**
+         * Returns static rune data from the API
+         */
+        getStaticRuneData: function() {
+            return new Promise(function(resolve, reject) {
+                RiotAPI.getRunes('en_GB').then(function(data) {
+                    resolve(data);
+                }).catch(function(error) {
+                    console.log("error getting the rune data: " + error);
+                    reject(error);
+                });
+            });
+        },
+    
+        /**
+         * Returns static rune data from the API
+         */
+        getStaticMasteryData: function() {
+            return new Promise(function(resolve, reject) {
+                RiotAPI.getMasteries('en_GB').then(function(data) {
+                    resolve(data);
+                }).catch(function(error) {
+                    console.log("error getting the mastery data: " + error);
+                    reject(error);
+                });
             });
         }
     }

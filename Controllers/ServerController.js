@@ -77,11 +77,11 @@ var ServerController = (function() {
         RiotAPI.getFeaturedGames(region).then(function(featuredGames) {
             //Randomize
             var num = featuredGames['gameList'].length;
-            var rand = Math.floor(Math.random() * num);
-            
+            var rand = Math.floor(Math.random() * (num - 1)); //-1 to account for the index starting at 0
+            console.log(num + " - " + rand);
             //The featured game endpoint does not contain all the data we need, so we fetch new data from the current game endpoint
             var summonerName = Util.normalizeName(featuredGames['gameList'][rand]['participants'][0]['summonerName']);
-            requestGameInformation(socket, summonerName, region);
+            requestGameInformation(socket, summonerName, region, true);
         });
     }
     
@@ -90,8 +90,9 @@ var ServerController = (function() {
      * @param {Socket} socket
      * @param {String} searchedName
      * @param {String} region
+     * @param {Boolean} randomGameFlag Whether or not this game is requested as a random game
      */
-    var requestGameInformation = function(socket, searchedName, region) {
+    var requestGameInformation = function(socket, searchedName, region, randomGameFlag) {
         //Remove previous subscription
         if(socketGamePairs.socket) {
             socketGamePairs.socket.removeSubscriber(socket);
@@ -106,7 +107,8 @@ var ServerController = (function() {
             //Could not find a player with this name
             errorObject = {
                 type: "Summoner name",
-                error: "No summoner by that name"
+                error: "No summoner by that name",
+                    crucial: true
             }
             return Promise.reject(errorObject);
 
@@ -115,13 +117,17 @@ var ServerController = (function() {
             return RiotAPI.getCurrentGame(region, summonerData[searchedName]['id']);
 
         }).catch(function(error) {
+            /* The searched for player is currently not in a game
+             * Send an error message back to the client with this information */
+            
+            /* Log error */
             console.log(error.stack);
             console.log(error);
             if(!errorObject) {
-                //Player is not in a game
                 errorObject = {
                     type: "No game",
-                    error: "Summoner is not currently in a game"
+                    error: "Summoner is not currently in a game",
+                    crucial: true
                 }
                 return Promise.reject(errorObject);
             }
@@ -152,9 +158,19 @@ var ServerController = (function() {
             socketGamePairs[socket] = gc;
 
         }).catch(function(error) {
-            console.log(error.stack);
-            //Emit the error message
-            Server.emitData(socket, "error", error);
+            /* If the game was assigned as a randomg game,
+             * not finding the game means it is finished
+             * therefore we assign a new random game to the socket */
+            if(randomGameFlag) {
+                console.log("Random game was ended, assigning new game...");
+                handRandomGame(socket, region);
+            }
+            /* Send the error to the client */
+            else {
+                console.log(error.stack);
+                //Emit the error message
+                socket.emit("message", {"error": error} );
+            }
         });
     }
     

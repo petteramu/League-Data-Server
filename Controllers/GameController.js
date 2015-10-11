@@ -204,20 +204,28 @@ var GameController = function(coreData, region) {
     
     //Constructor
     (function() {
+        //These are only used in the formatting of the core data
+        //Therefore they are not referenced elsewhere in the object
+        var runeData;
         //Get the champion data
         DataHandler.getStaticChampionData().then(function(championData) {
             //Store data
             champData = championData;
             
-            //Format core data then begin retreiving data
-            return DataFormatter.formatCoreData(coreData, championData, region, RiotAPI.staticData.version);
+            return DataHandler.getStaticRuneData();
+            
+        }).then(function(data) {
+            runeData = data;
+            
+            return DataHandler.getStaticMasteryData();
+            
+        }).then(function(masteryData) {
+            //Format core data
+            return DataFormatter.formatCoreData(coreData, champData, runeData, masteryData, region, RiotAPI.staticData.version);
             
         }).then(function(formatted) {
             //Save the data to the cache
             cache.core = formatted;
-            
-            //Start game duration updates
-            gameStartTime = formatted.gameStartTime;
             
             //Send the core data
             emitData("core", formatted);

@@ -1,7 +1,7 @@
 var Readables = {
     readableMaps: {
         '1':  "Original Summoner's Rift",
-        '10': "Current Twisted Treeline",
+        '10': "Twisted Treeline",
         '11': "Summoner's Rift",
         '12': "Howling Abyss"
     },

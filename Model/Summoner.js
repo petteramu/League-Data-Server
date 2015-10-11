@@ -5,13 +5,14 @@
  * @param {Integer} championId
  * @param {Integer} teamId
  */
-var Summoner = function(summonerId, name, participantNo, championId, teamId, region) {
+var Summoner = function(summonerId, name, participantNo, championId, teamId, runes, region) {
     this.participantNo = participantNo;
     this.summonerId = summonerId;
     this.teamId = teamId;
     this.championId = championId;
     this.region = region;
     this.summonerName = name;
+    this.runes = runes;
     
     return this;
 }

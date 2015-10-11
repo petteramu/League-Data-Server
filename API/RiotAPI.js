@@ -40,10 +40,6 @@ var RiotAPI = (function() {
     //Non-static cache
     var cache = {};
     
-    //The time that is forced between two calls
-    //Mainly used to account for the time taken between adding a stamp and the actual call being made in the riot db
-    var forcedTimeBetweenCalls = 75;
-    
     //A reference to whether or not the API is waiting for a request to finish
     var waiting = false;
     
@@ -60,7 +56,7 @@ var RiotAPI = (function() {
         maxTime: 600
     }];
     
-    //Find the largest maxCalls and set it to limit the amount of timestamps
+    //Find the largest maxCalls and set it to limit the amount of timestamps saved
     var timestampLimit = 0;
     for(var i = 0; i < limits.length; i++) {
         if(limits[i].maxCalls > timestampLimit)
@@ -69,7 +65,6 @@ var RiotAPI = (function() {
     
     //Finds the time remaining for either the limit per 10min or 10s, dependent on which is longer
     var getTimeRemaining = function() {
-        debugger;
         var remaining = []; //Array holding the different values for the time remaining
         
         //Iterate each limit and find the time remaining for each
@@ -77,17 +72,23 @@ var RiotAPI = (function() {
             var limitObj = limits[i];
             
             if(timestamps.length >= limitObj.maxCalls) {
-                remaining.push((limitObj.maxTime * 1000) - (new Date() - timestamps[limitObj.maxCalls-1]) + forcedTimeBetweenCalls); //In milliseconds
+                var time = (limitObj.maxTime * 1000) - (new Date() - timestamps[limitObj.maxCalls-1]);
+                if(time < 0) remaining.push(config.forcedTimeBetweenCalls);
+                else remaining.push(time + config.forcedTimeBetweenCalls);
 
             } else {
                 remaining.push(0);
             }
         };
-        
+        /* Return the highest waitint time.
+         * For instance, if we have to wait 1s to be within the 10 per 10 rule
+         * but 2 seconds to be within the 500 per 600 rule
+         * we wait 2 seconds */
         return Math.max.apply(Math, remaining);
     }
     
-    //Adds a timestamp
+    /* Adds a timestamp to the list of timestamps
+     * @param {Date} timestamp */
     var addStamp = function(timestamp) {
         //Remove if at max calls
         if(timestamps.length == timestampLimit) timestamps.pop();
@@ -113,6 +114,20 @@ var RiotAPI = (function() {
         //Execute queue if the new promise is the only one in it
         if(!executing) executeNext();
     };
+    
+    var addToQueueAsFirstItem = function(url, cb) {
+        //Create queueitem
+        var item = {
+            url: url,
+            callback: cb
+        };
+        
+        //Insert element
+        queue.push(item);
+        
+        //Execute queue if the new promise is the only one in it
+        if(!executing) executeNext();
+    }
     
     //Gets the next item in the queue of null
     var getNextItem = function() {
@@ -143,10 +158,9 @@ var RiotAPI = (function() {
         
         //Check if the rate limit is reached
         var timeRemaining = getTimeRemaining();
-        
+
         //Display debug info
         if(timeRemaining > 0) {
-//            console.log("Waiting: %s", timeRemaining);
             waiting = true;
         }
         
@@ -159,7 +173,6 @@ var RiotAPI = (function() {
     
     //Makes an actual request
     var makeRequest = function(url, cb) {
-        
         //Display debug info it is wished
         if (debug){
             console.log('Calling url', url);
@@ -173,7 +186,6 @@ var RiotAPI = (function() {
         
         addStamp(new Date());
         req.get(options).then(function(data) {
-            
             //Return as JSON if it is in json format
             try {
                 var json = JSON.parse(data);
@@ -190,20 +202,29 @@ var RiotAPI = (function() {
             }
             
         }).catch(errors.StatusCodeError, function(error) {
-            //Reject
-            cb(error);
-            console.log(error.statusCode);
-            //Proceed in the queue
-            executeNext();
+            //Insert the time of the request to as a stamp
+            
+            //If it was a rate limit error, put the item back in the queue as the first item
+            //Then execute after a delay
+            if(error.statusCode == 429) {
+                console.log(error.statusCode);
+                addToQueueAsFirstItem(url, cb);
+                setTimeout(executeNext, config.enforcedDelayAfterRateLimited);
+            }
+            else {
+                //Reject
+                cb(error);
+                console.log(error.statusCode);
+                //Proceed in the queue
+                executeNext();
+            }
             
         }).catch(errors.RequestError, function(error) {
             //Reject
             cb(error);
             console.log(error.stack);
-            
             //Proceed in the queue
             executeNext();
-            
         });
     }
     
@@ -292,7 +313,6 @@ var RiotAPI = (function() {
                 }
                 //Store in staticData object for future use
                 staticData['version'] = data[0];
-                console.log(data[0]);
                 //Resolve promise
                 resolve(data);
             });
@@ -530,7 +550,7 @@ var RiotAPI = (function() {
     };
     
     //Runes
-    var getRunes = function(version, locale) {
+    var getRunes = function(locale) {
         return new Promise(function(resolve, reject) {
             //If the data exists in the static data object
             if(staticData.runes) {
@@ -538,8 +558,12 @@ var RiotAPI = (function() {
                 resolve(staticData.runes);
                 return;
             }
+            else if(!staticData.version) {
+                reject("No version data available");
+                return;
+            }
 
-	       var url = 'http://ddragon.leagueoflegends.com/cdn/' + version + '/data/' + locale + '/rune.json';
+	       var url = 'http://ddragon.leagueoflegends.com/cdn/' + staticData.version + '/data/' + locale + '/rune.json';
 
             makeRequest(url, function(err, data) {
                 if(err) reject(Error(err));
@@ -552,14 +576,18 @@ var RiotAPI = (function() {
     };
     
     //Masteries
-    var getMasteries = function(version, locale) {
+    var getMasteries = function(locale) {
         return new Promise(function(resolve, reject) {
             if(staticData.masteries) {
                 resolve(staticData.masteries);
                 return;
             }
+            else if(!staticData.version) {
+                reject("No version data available");
+                return;
+            }
 
-	       var url = 'http://ddragon.leagueoflegends.com/cdn/' + version + '/data/' + locale + '/mastery.json';
+	       var url = 'http://ddragon.leagueoflegends.com/cdn/' + staticData.version + '/data/' + locale + '/mastery.json';
 
             makeRequest(url, function(err, data) {
                 if(err) reject(Error(err));
@@ -594,19 +622,23 @@ var RiotAPI = (function() {
     };
     
     //Summoner spells
-    var getSummonerSpells = function(version, locale) {
+    var getSummonerSpells = function(locale) {
         return new Promise(function(resolve, reject) {
             if(staticData.summonerspells) {
-                resolve(staticData.summonerspells);
+                resolve(staticData.summonerSpells);
+                return;
+            }
+            else if(!staticData.version) {
+                reject("No version data available");
                 return;
             }
 
-	       var url = 'http://ddragon.leagueoflegends.com/cdn/' + version + '/data/' + locale + '/summoner.json';
+	       var url = 'http://ddragon.leagueoflegends.com/cdn/' + staticData.version + '/data/' + locale + '/summoner.json';
 
             makeRequest(url, function(err, data) {
                 if(err) reject(Error(err));
                 else {
-                    staticData.summonerspells = data;
+                    staticData.summonerSpells = data;
                     resolve(data);
                 }
             });
@@ -747,6 +779,13 @@ var RiotAPI = (function() {
     //Get the version upon creation
     getCurrentVersion('euw').catch(function(error) {
         console.log("Failed to load current version: %s", error);
+        
+    }).then(function(data) {;
+        //Get the summoner spell data
+        return getSummonerSpells('en_US');
+                            
+    }).catch(function(error) {
+        console.log("Failed to load summoner spell data: %s", error);
     });
     
     return {

@@ -16,6 +16,7 @@ var analysisController = (function() {
                 //Insert data into the database
                 Database.insertMatches(summonerId, data).then(function(rows) {
                     return Database.getRoles(summonerId);
+                    
                 }).then(function(newData) {
                     resolve(newData);
                     
