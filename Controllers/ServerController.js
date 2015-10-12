@@ -43,8 +43,17 @@ var ServerController = (function() {
     /**
      * Removes and deletes any references to the given GameController
      */
-    var removeGameController = function(gc) {
-        console.log(delete gameControllers[gc.gameId]);
+    var removeGameController = function(gameId) {
+        console.log("Deleting game controller for: " + gameId);
+        
+        //Delete any remaining socket subscribers
+        for(var socket in socketGamePairs) {
+            if(socketGamePairs.hasOwnProperty(socket) && socketGamePairs[socket] && socketGamePairs[socket].gameId === gameId) {
+                socketGamePairs.socket = null;
+            }
+        }
+        
+        delete gameControllers[gameId];
     }
     
     /**
@@ -148,7 +157,7 @@ var ServerController = (function() {
                 gameControllers[gameData['gameId']] = new GameController(gameData, region);
                 
                 //Set the time for deletion
-                setTimeout(function() { removeGameController(gameControllers[gameData['gameId']]); }, 3600000); //1 hour
+                setTimeout(function() { removeGameController(gameData['gameId']); }, 3600000); //1 hour = 3600000 ms
             }
 
             //Add the socket as a listener
