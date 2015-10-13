@@ -16,7 +16,7 @@ var Database = (function()
         port     : DatabaseCredentials.port || '3306',
         user     : DatabaseCredentials.user || 'root',
         password : DatabaseCredentials.password || '',
-        database : DatabaseCredentials.db | 'petteramu_com',
+        database : DatabaseCredentials.database,
         debug: false
     }).then(function(conn) {
         connection = conn;
