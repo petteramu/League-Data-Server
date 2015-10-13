@@ -15,7 +15,7 @@ var server = (function() {
     
     //Start listening
     httpserver.listen(ServerConfig.port, function() {
-        console.log("Server listening on: " + server_port);
+        console.log("Server listening on: " + ServerConfig.port);
     });
     
     io.sockets.on('connection', function (socket) {
