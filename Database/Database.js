@@ -1,6 +1,7 @@
 "use strict";
-var mysql  = require('promise-mysql');
-var Promise = require('bluebird');
+var mysql  = require('promise-mysql'),
+    Promise = require('bluebird'),
+    DatabaseCredentials = require('./DatabaseCredentials.js');
 
 //TODO: fix database to contain only averages, as the total amount of deaths is not provided from the Riot API, and therefore the total amount derived will be wrong as the numbers might be rounded
 //TODO: handle the league request to handle a 404 return(of none of the playes are ranked)
@@ -11,11 +12,11 @@ var Database = (function()
         
     //Initialize mysql connection
     mysql.createConnection({
-        host     : process.env.OPENSHIFT_MYSQL_DB_HOST || 'localhost',
-        port     : process.env.OPENSHIFT_MYSQL_DB_PORT || '3306',
-        user     : process.env.OPENSHIFT_MYSQL_DB_USERNAME || 'root',
-        password : process.env.OPENSHIFT_MYSQL_DB_PASSWORD || '',
-        database : 'petteramu_com',
+        host     : DatabaseCredentials.host || 'localhost',
+        port     : DatabaseCredentials.port || '3306',
+        user     : DatabaseCredentials.user || 'root',
+        password : DatabaseCredentials.password || '',
+        database : DatabaseCredentials.db | 'petteramu_com',
         debug: false
     }).then(function(conn) {
         connection = conn;
