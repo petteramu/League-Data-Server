@@ -8,13 +8,12 @@ var ServerController = require('./Controllers/ServerController.js');
 var server = (function() {
 
     var instance = this,
-        server_port = process.env.OPENSHIFT_NODEJS_PORT || 8080,
-        server_ip   = process.env.OPENSHIFT_NODEJS_IP   || '127.0.0.1';
+        server_port = 8080;
     io.set('origins', '*:*');
     
     //Start listening
-    httpserver.listen(server_port, server_ip, function() {
-        console.log("Server online at: " + server_ip + ":" + server_port);
+    httpserver.listen(server_port, function() {
+        console.log("Server listening on: " + server_port);
     });
     
     io.sockets.on('connection', function (socket) {
