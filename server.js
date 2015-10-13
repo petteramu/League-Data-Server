@@ -1,18 +1,20 @@
 "use strict";
 
-var app = require('express')();
-var httpserver = require('http').Server(app);
-var io = require('socket.io')(httpserver);
-var ServerController = require('./Controllers/ServerController.js');
+var app = require('express')(),
+    httpserver = require('http').Server(app),
+    io = require('socket.io')(httpserver),
+    ServerController = require('./Controllers/ServerController.js'),
+    ServerConfig = require('./ServerConfig.js');
 
 var server = (function() {
 
-    var instance = this,
-        server_port = 8080;
+    var instance = this;
+    
+    //Allow connections from outside domains
     io.set('origins', '*:*');
     
     //Start listening
-    httpserver.listen(server_port, function() {
+    httpserver.listen(ServerConfig.port, function() {
         console.log("Server listening on: " + server_port);
     });
     
