@@ -1,7 +1,10 @@
 "use strict";
 var mysql  = require('promise-mysql'),
     Promise = require('bluebird'),
-    DatabaseCredentials = require('./DatabaseCredentials.js');
+    DatabaseCredentials = require('./DatabaseCredentials.js'),
+    UserNotFoundError = require('../Errors/UserNotFoundError.js'),
+    InternalServerError = require('../Errors/InternalServerError.js'),
+    Config = require('../Config/config.js');
 
 //TODO: fix database to contain only averages, as the total amount of deaths is not provided from the Riot API, and therefore the total amount derived will be wrong as the numbers might be rounded
 //TODO: handle the league request to handle a 404 return(of none of the playes are ranked)
@@ -215,6 +218,11 @@ var Database = (function()
                 var sql = "INSERT IGNORE INTO game (gameId, gameCreation, queueType, season, platformId) VALUES";
                 var participantSql = "INSERT IGNORE INTO participant (gameId, summonerId, championId, lane, role) VALUES";
 
+                if(data['matches'] === undefined) {
+                    resolve(0);
+                    return;
+                }
+
                 data['matches'].forEach(function(element, index) {
                     //Insert the data into the SQL
 
@@ -234,8 +242,71 @@ var Database = (function()
                 }).then(function(rows) {
                     resolve(rows);
                 }).catch(function(error) {
+                    console.log("error when inserting matches");
                     reject(error);
                 });
+            });
+        },
+
+        insertDetailedMatch: function(data) {
+            return new Promise(function(resolve, reject) {
+                var sql = "INSERT IGNORE INTO game (gameId, mapId, gameMode, gameType, gameVersion, gameDuration) VALUES";
+                var participantSql = "INSERT INTO participant (gameId, summonerId, teamId, kills, deaths, assists, winner, spell1Id, spell2Id) VALUES";
+
+                var statsSql = "INSERT INTO participant_stats (gameId, summonerId, champLevel, doubleKills, tripleKills,\
+                 quadraKills, pentaKills, unrealKills, killingSprees, largestKillingSpree, largestCriticalStrike, totalDamageDealt,\
+                  totalDamageDealtToChampions, totalDamageTaken, physicalDamageDealt, physicalDamageDealtToChampions, physicalDamageTaken,\
+                   magicDamageDealt, magicDamageDealtToChampions, magicDamageTaken, trueDamageDealt, trueDamageDealtToChampions, trueDamageTaken, totalHeal,\
+                    sightWardsBought, visionWardsBought, wardsPlaced, wardsKilled, item0,item1, item2, item3, item4, item5, item6, minionsKilled,\
+                     firstBloodAssist, firstBloodKill, goldEarned, goldSpent, totalTimeCrowdControlDealt, totalUnitsHealed, neutralMinionsKilled,\
+                      neutralMinionsKilledEnemyJungle, neutralMinionsKilledTeamJungle, towerKills, inhibitorKills) VALUES";
+
+                sql += " ('" + data.matchId + "', '" + data.mapId + "', '" + data.matchMode + "', '" + data.matchType + "', '" + data.matchVersion + "', '" + data.matchDuration + "')";
+                
+                data['participants'].forEach(function(element, index) {
+                    //Do not include an "and" in the first element
+                    if(index > 0) {
+                        statsSql += " ,";
+                        participantSql += " ,";
+                    }
+
+                    participantSql += " ('" + data.matchId + "', '" + data['participantIdentities'][index].player.summonerId + "', '" + element.teamId + "', '" + element.stats.kills + "', '" + element.stats.deaths 
+                     + "', '" + element.stats.assists + "', '" + element.stats.winner + "', '" + element.stats.spell1Id + "', '" + element.stats.spell2Id + "')";
+
+                    statsSql += " ('" + data.matchId + "', '" + data['participantIdentities'][index].player.summonerId + "', '" + element.stats.champLevel + "', '" + element.stats.doubleKills + "', '" + element.stats.tripleKills
+                         + "', '" + element.stats.quadraKills + "', '" + element.stats.pentaKills + "', '" + element.stats.unrealKills + "', '" + element.stats.killingSprees + "', '" + element.stats.largestKillingSpree
+                          + "', '" + element.stats.largestCriticalStrike + "', '" + element.stats.totalDamageDealt + "', '" + element.stats.totalDamageDealtToChampions + "', '" + element.stats.totalDamageTaken
+                           + "', '" + element.stats.physicalDamageDealt + "', '" + element.stats.physicalDamageDealtToChampions + "', '" + element.stats.physicalDamageTaken + "', '" + element.stats.magicDamageDealt
+                            + "', '" + element.stats.magicDamageDealtToChampions + "', '" + element.stats.magicDamageTaken + "', '" + element.stats.trueDamageDealt + "', '" + element.stats.trueDamageDealtToChampions
+                             + "', '" + element.stats.trueDamageTaken + "', '" + element.stats.totalHeal + "', '" + element.stats.sightWardsBought + "', '" + element.stats.visionWardsBought + "', '" + element.stats.wardsPlaced
+                              + "', '" + element.stats.wardsKilled + "', '" + element.stats.item0 + "', '" + element.stats.item1 + "', '" + element.stats.item2 + "', '" + element.stats.item3 + "', '" + element.stats.item4
+                               + "', '" + element.stats.item5 + "', '" + element.stats.item6 + "', '" + element.stats.minionsKilled + "', '" + element.stats.firstBloodAssist + "', '" + element.stats.firstBloodKill + "', '" + element.stats.goldEarned
+                                + "', '" + element.stats.goldSpent + "', '" + element.stats.totalTimeCrowdControlDealt + "', '" + element.stats.totalUnitsHealed + "', '" + element.stats.neutralMinionsKilled + "', '" + element.stats.neutralMinionsKilledEnemyJungle
+                                 + "', '" + element.stats.neutralMinionsKilledTeamJungle + "', '" + element.stats.towerKills + "', '" + element.stats.inhibitorKills + "')";
+                });
+
+                sql += " ON DUPLICATE KEY UPDATE mapId=VALUES(mapId), gameMode=VALUES(gameMode), gameType=VALUES(gameType), gameVersion=VALUES(gameVersion), gameDuration=VALUES(gameDuration)";
+                participantSql += " ON DUPLICATE KEY UPDATE teamId=VALUES(teamId), deaths=VALUES(deaths), kills=VALUES(kills), assists=VALUES(assists), winner=VALUES(winner), spell1Id=VALUES(spell1Id), spell2Id=VALUES(spell2Id)";
+                statsSql += " ON DUPLICATE KEY UPDATE gameId=VALUES(gameId)";
+
+                //Perform query
+                connection.query(sql).then(function(rows) {
+                    return connection.query(participantSql);
+                }).catch(function(error) {
+                    console.log("sql query");
+                    reject(error);
+                }).then(function(rows) {
+                    return connection.query(statsSql);
+                }).catch(function(error) {
+                    console.log("participant query");
+                    reject(error);
+                }).then(function(rows) {
+                    resolve(rows)
+                }).catch(function(error) {
+                    console.log("stats query");
+                    reject(error);
+                });
+
             });
         },
 
@@ -247,6 +318,8 @@ var Database = (function()
                 connection.query(sql).then(function(rows) {
                     resolve(rows);
                 }).catch(function(error) {
+                    console.log("rejkected");
+                    console.log(error);
                     reject(error);
                 });
             });
@@ -259,6 +332,12 @@ var Database = (function()
             });
         },
 
+        /*
+         * Returns the timestamps of the last update to the games of a 
+         * list of summoners
+         *
+         * @param {List} summonerIds
+         */
         getUpdateTimestamps: function(summonerIds) {
             return new Promise(function(resolve, reject) {
                 var sql = "SELECT * FROM summoner_games_update WHERE";
@@ -298,6 +377,13 @@ var Database = (function()
             });
         },
 
+        /*
+         * Insert a set of champion information into the database
+         * This information contains must contain the name and id of the champion
+         * in an object where each champinon is represented as a key
+         *
+         * @param {Object} data The raw data from
+         */
         updateChampionTable: function(data) {
             return new Promise(function(resolve, reject) {
                 var sql = "INSERT INTO champion (championId, name) VALUES";
@@ -316,6 +402,114 @@ var Database = (function()
 
                 connection.query(sql).then(function(rows) {
                     resolve(rows);
+                }).catch(function(error) {
+                    reject(error);
+                });
+            });
+        },
+        
+        /**
+         * Fetches a users row from the database
+         * 
+         * @param {String} username The email of the user
+         * @returns {Promise} Resolving promise with the data if the user is found, if not the promise rejects with a UserNotFoundError
+         */
+        getUser: function(username) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    /* Use parameterized queries to defend against injection attacks */
+                    connection.query("SELECT * FROM user WHERE email = ?", username).then(function(rows) {
+                        if(rows.length > 0) {
+                            console.log(rows);
+                            /* Only resolve with the first row, as it should only be one(enforced by the db) */
+                            resolve(rows[0]);
+                        }
+                        else {
+                            reject(new UserNotFoundError("User does not exists"));
+                        }
+                    }).catch(function(error) {
+                        console.log(error);
+                        reject(new InternalServerError("SQL syntax error"));
+                    });
+                }
+                catch(err) {
+                    reject(err);
+                }
+            }); 
+        },
+        
+        /*
+         * Deletes any series associates with this user
+         * @param {Integer} userid
+         * @return {Promise} Resolves upon success, rejects on server errors
+         */
+        deleteSeriesForUser: function(userid) {
+            return connection.query("DELETE FROM login_series WHERE userid = ?", userid);
+        },
+        
+        /*
+         * Deletes any data about this series
+         * @param {Integer} userid
+         * @return {Promise} Resolves upon success, rejects on server errors
+         */
+        deleteSeries: function(series) {
+            return connection.query("DELETE FROM login_series WHERE series = ?", series);
+        },
+        
+        /*
+         * Registers a pair of access and refresh tokens in the database
+         * @param {Integer} userid
+         * @param {String} access_token
+         * @param {String} refresh_token
+         * @param {Date} created The time the tokens were created
+         * @param {Date} expiryDate The time these tokens expires
+         * @param {Promise} Will resolve if both are inserted successfully and reject otherwise
+         */
+        createNewLoginSeries: function(userid, series, token) {
+            console.log(expiryDate);
+            return new Promise(function(resolve, reject) {
+                connection.query("INSERT INTO login_series VALUES(?, ?, ?, now() + INTERVAL " + Config.accessTokenExpiry + " HOURS)", [userid, series, token]).then(function(rows) {
+                    resolve(rows);
+                    
+                }).catch(function(error) {
+                    console.log(error);
+                    reject(new InternalServerError(error));
+                });
+                                 
+             });
+        },
+        
+        /* 
+         * Checks if the given access token is registered in the databse
+         * @param {String} token
+         */
+        accessTokenExists: function(token) {
+            return new Promise(function(resolve, reject) {
+                connection.query("SELECT token FROM access_tokens WHERE token = ?", token).then(function(rows) {
+                    if(rows.length > 0) {
+                        resolve(true);
+                    }
+                    else {
+                        resolve(false);
+                    }
+                }).catch(function(error) {
+                    reject(error);
+                });
+            });
+        },
+        
+        /* Returns all the data from the access token table for the given token
+         * @param {String} token
+         */
+        getLoginSeriesData: function(token) {
+            return new Promise(function(resolve, reject) {
+                connection.query("SELECT * FROM login_series WHERE series = ? AND token = ?", [series, token]).then(function(rows) {
+                    if(rows.length > 0) {
+                        resolve(rows[0]);
+                    }
+                    else {
+                        reject();
+                    }
                 }).catch(function(error) {
                     reject(error);
                 });

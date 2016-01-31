@@ -100,7 +100,7 @@ var DataHandler = (function() {
                 //Handles errors with the match list endpoint
                 
                 //Player has no games in the given queue ever or since the start of 2013
-                if(error === 404 || error === 422) {console.log(error);
+                if(error === 404 || error === 422) {
                     
                     //Log the update time
                     Database.logGameUpdate(summonerId);
@@ -192,8 +192,15 @@ var DataHandler = (function() {
                     //"updated" is now either the original data or updated data if it was updated
                     resolve(updated);
                 }).catch(function(error) {
-                    console.log(error);
-                    reject(error);
+                    // There was no data, resolve without results
+                    if(error.statusCode == 404) {
+                        resolve([]);
+                    }
+                    else {
+                        console.log("Could not find league data");
+                        console.log(error.stack);
+                        reject(error);
+                    }
                 });
             });
         },

@@ -40,6 +40,7 @@ var GameController = function(coreData, region) {
         wrap[stage] = data;
         
         console.log("Sending " + stage);
+        console.log(data);
         //Find the subscribers that require this data
         subscribers.forEach(function(subscriber) {
             if(!subscriber.stages[stage]) {

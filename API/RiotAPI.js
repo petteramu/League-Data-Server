@@ -101,6 +101,21 @@ var RiotAPI = (function() {
     }
             
     //Adds a url to the request queue and start executing the queue if its not already executing
+    var addToAnalysisQueue = function(url, cb) {
+        //Create queueitem
+        var item = {
+            url: url,
+            callback: cb
+        };
+        
+        //Insert element
+        analysisQueue.push(item);
+        
+        //Execute queue if the new promise is the only one in it
+        if(!executing) executeNext();
+    };
+            
+    //Adds a url to the request queue and start executing the queue if its not already executing
     var addToQueue = function(url, cb) {
         //Create queueitem
         var item = {
@@ -133,6 +148,12 @@ var RiotAPI = (function() {
     var getNextItem = function() {
         //If the queue is not empty return an item
         if(queue.length > 0) return queue.pop();
+
+        //Give item from analysis queue if no items in normal queue
+        else if(analysisQueue.length > 0) {
+            return analysisQueue.pop();
+        }
+
         //If it is empty return null    
         else return null;
     }
@@ -140,7 +161,7 @@ var RiotAPI = (function() {
     //Execute the next item in the queue
     var executeNext = function() {
         //Do not execute another if there is a request in the waiting
-        //This forces the queue to only execute one reques at a time
+        //This forces the queue to only execute one request at a time
         if(waiting) return;
         
         //Set that the API is executing a request
@@ -254,14 +275,14 @@ var RiotAPI = (function() {
         else if(options.static) {
             result = url.format({
                 protocol: (secure) ? 'https:' : 'http:',
-                host: globalPath + localPath + "static-data/" + options.region + options.path,
+                host: globalPath + localPath + "static-data/" + options.region.toLowerCase() + options.path,
                 query: options.query
             });
         }
         else {
             result = url.format({
                 protocol: (secure) ? 'https:' : 'http:',
-                host: host + localPath +  options.region + options.path,
+                host: host + localPath +  options.region.toLowerCase() + options.path,
                 query: options.query
             });
         }
@@ -271,21 +292,35 @@ var RiotAPI = (function() {
     };
     
     //Creates a promise which adds an url to a queue and resolves when the request has been made
-    var createPromise = function(url) {        
+    var createPromise = function(url, analysis) {
         //Create and return promise
         return new Promise(function(resolve, reject) {
-            
-            addToQueue(url, function(err, data) {
-                
-                //Handle error
-                if(err) {
-                    reject(err);
-                }
-                //No error = resolve
-                else {
-                    resolve(data);
-                }
-            });
+            if(analysis) {
+                addToAnalysisQueue(url, function(err, data) {
+                    
+                    //Handle error
+                    if(err) {
+                        reject(err);
+                    }
+                    //No error = resolve
+                    else {
+                        resolve(data);
+                    }
+                });
+            }
+            else {
+                addToQueue(url, function(err, data) {
+                    
+                    //Handle error
+                    if(err) {
+                        reject(err);
+                    }
+                    //No error = resolve
+                    else {
+                        resolve(data);
+                    }
+                });
+            }
         });
     }
     
@@ -339,8 +374,27 @@ var RiotAPI = (function() {
             path: '/v2.2/matchlist/by-summoner/' + summonerId,
             query: query
         });
-        
+
         return createPromise(url);
+    }
+
+    var getMatch = function(matchId, region, analysis) {
+        if(analysis === undefined) {
+            analysis = false;
+        }
+
+        var query = {};
+        if(region) query.region = region;
+        if(matchId == undefined) return false
+        
+        //Create url
+        var url = generateUrl({
+            region: region,
+            path: '/v2.2/match/' + matchId,
+            query: query
+        });
+        
+        return createPromise(url, analysis);
     }
     
     //Gets the current game data for a summoner
@@ -824,7 +878,8 @@ var RiotAPI = (function() {
         getFeaturedGames: getFeaturedGames,
         getCurrentGame: getCurrentGame,
         getChampionsData: getChampionsData,
-        getMatchList: getMatchList
+        getMatchList: getMatchList,
+        getMatch: getMatch
     };
 }());
 

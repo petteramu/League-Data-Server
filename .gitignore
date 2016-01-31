@@ -51,3 +51,6 @@ node_modules/
 # Ignore config to keep api key secret
 API/config.js
 Database/DatabaseCredentials.js
+
+# Ignore certification
+cert/

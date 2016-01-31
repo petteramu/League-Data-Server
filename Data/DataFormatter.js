@@ -18,33 +18,40 @@ var DataFormatter = (function() {
     function countMasteries(masteries, masteryData) {
         //Insert to blue team
         var obj = {
-            offense: 0,
-            defense: 0,
-            utility: 0
+            Ferocity: 0,
+            Cunning: 0,
+            Resolve: 0,
+            keystone: undefined,
+            all: masteries
         }
 
         /* The trees representing the masteries contain each level as
          * as an own list of masteries. Therefore we simplify the process
          * by concatenating these lists so we get one big one for each tree */
-        var offTree = [].concat.apply([], masteryData.tree.Offense);
-        var defTree = [].concat.apply([], masteryData.tree.Defense);
-        var utiTree = [].concat.apply([], masteryData.tree.Utility);
-        
+        var offTree = [].concat.apply([], masteryData.tree.Ferocity);
+        var defTree = [].concat.apply([], masteryData.tree.Cunning);
+        var utiTree = [].concat.apply([], masteryData.tree.Resolve);
+
         //Iterate masteries
         masteries.forEach(function(mastery) {
-            //If the mastery is in the offense tree
+            //If the mastery is in the Ferocity tree
             //Some of the positions in the trees are empty, and are therefore represented as null, skip these element
             if(_.find(offTree, function(element) { if(element) { return element.masteryId == mastery.masteryId } else { return false } })) {
                 //Increase the offense count by the rank of the mastery
-                obj.offense += mastery.rank;
+                obj.Ferocity += mastery.rank;
             }
-            //Defense tree
+            //Cunning tree
             else if(_.find(defTree, function(element) { if(element) { return element.masteryId == mastery.masteryId } else { return false } })) {
-                obj.defense += mastery.rank;
+                obj.Cunning += mastery.rank;
             }
-            //Can now only be in the utility tree
+            //Can now only be in the Resolve tree
             else {
-                obj.utility += mastery.rank;
+                obj.Resolve += mastery.rank;
+            }
+
+            //Check if keystone
+            if((mastery.masteryId + '').indexOf('6', 1) > -1 && mastery.rank == 1) {
+                obj.keystone = mastery;
             }
         });
         
@@ -222,52 +229,63 @@ var DataFormatter = (function() {
         formatRoleData: function(rawData, summoners) {
             var response = [];
             
+            if(rawData.length < 1) {
+                return response;
+            }
+
             //Each summoner will have a object in the rawdata
             rawData.forEach(function(roleData) {
                 var participant = _.find(summoners, function(item) {
-                    return item.summonerId == roleData[0].summonerId;
+                    if(roleData != undefined && roleData.length > 0) {
+                        return item.summonerId == roleData[0].summonerId;
+                    }
+                    return false;
                 });
 
-                //Holds our response to the client
-                var object = {
-                    participantNo: participant.participantNo,
-                    roles: []
-                };
+                //
+                if(participant != undefined) {
 
-                //Find the total amount of games for this summoner
-                var totalGames = 0;
-                roleData.forEach(function(element) {
-                  totalGames += element.games;
-                });
-                
-                //Insert into response
-                response.push(object);
+                    //Holds our response to the client
+                    var object = {
+                        participantNo: participant.participantNo,
+                        roles: []
+                    };
 
-                //Create responses
-                roleData.forEach(function(element) {
-
-                    //Find percentage
-                    var percentage = (element.games * 100) / totalGames;
-
-                    //Find a more suitable type of roles, each different realRole can be created from several unique combinations of lane + role
-                    var realRole = Utilities.getRealRole(element.role, element.lane);
+                    //Find the total amount of games for this summoner
+                    var totalGames = 0;
+                    roleData.forEach(function(element) {
+                      totalGames += element.games;
+                    });
                     
-                    //Find entry of realRole
-                    var existing = _.find(object.roles, function(role) { return role.role === realRole; });
-                    if(existing) {
-                        existing.games = existing.games + element.games;
-                    }
-                    else {
-                        object.roles.push({
-                            role: realRole,
-                            games: element.games,
-                            percent: isNaN(percentage) ? 0 : percentage.toFixed(1)
-                        });
-                    }
-                });
-                
-                //Sort the roles in descending order
-                object.roles = _.sortBy(object.roles, function(role) { return role.games }).reverse();
+                    //Insert into response
+                    response.push(object);
+
+                    //Create responses
+                    roleData.forEach(function(element) {
+
+                        //Find percentage
+                        var percentage = (element.games * 100) / totalGames;
+
+                        //Find a more suitable type of roles, each different realRole can be created from several unique combinations of lane + role
+                        var realRole = Utilities.getRealRole(element.role, element.lane);
+                        
+                        //Find entry of realRole
+                        var existing = _.find(object.roles, function(role) { return role.role === realRole; });
+                        if(existing) {
+                            existing.games = existing.games + element.games;
+                        }
+                        else {
+                            object.roles.push({
+                                role: realRole,
+                                games: element.games,
+                                percent: isNaN(percentage) ? 0 : percentage.toFixed(1)
+                            });
+                        }
+                    }); 
+                    
+                    //Sort the roles in descending order
+                    object.roles = _.sortBy(object.roles, function(role) { return role.games }).reverse();
+                }
             });
             return response;
         },

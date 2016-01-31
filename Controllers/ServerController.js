@@ -87,7 +87,7 @@ var ServerController = (function() {
             //Randomize
             var num = featuredGames['gameList'].length;
             var rand = Math.floor(Math.random() * (num - 1)); //-1 to account for the index starting at 0
-            console.log(num + " - " + rand);
+
             //The featured game endpoint does not contain all the data we need, so we fetch new data from the current game endpoint
             var summonerName = Util.normalizeName(featuredGames['gameList'][rand]['participants'][0]['summonerName']);
             requestGameInformation(socket, summonerName, region, true);
