@@ -49,7 +49,7 @@ var ServerController = (function() {
         //Delete any remaining socket subscribers
         for(var socket in socketGamePairs) {
             if(socketGamePairs.hasOwnProperty(socket) && socketGamePairs[socket] && socketGamePairs[socket].gameId === gameId) {
-                socketGamePairs.socket = null;
+                socketGamePairs[socket] = null;
             }
         }
         
@@ -103,9 +103,9 @@ var ServerController = (function() {
      */
     var requestGameInformation = function(socket, searchedName, region, randomGameFlag) {
         //Remove previous subscription
-        if(socketGamePairs.socket) {
-            socketGamePairs.socket.removeSubscriber(socket);
-            socketGamePairs.socket = undefined;
+        if(socketGamePairs[socket]) {
+            socketGamePairs[socket]removeSubscriber(socket);
+            socketGamePairs[socket] = undefined;
         }
         var errorObject;
 
